@@ -88,6 +88,16 @@ export function activate(context: vscode.ExtensionContext): void {
     provider
   );
 
+  // Read configured spec directories
+  const getSpecDirectories = (): string[] => {
+    const config = vscode.workspace.getConfiguration('kiroSpecsDashboard');
+    const dirs = config.get<string[]>('specDirectories');
+    return dirs && dirs.length > 0 ? dirs : ['.kiro/specs'];
+  };
+
+  let specDirectories = getSpecDirectories();
+  provider.setSpecDirectories(specDirectories);
+
   // Auto-import Git data on first activation (if enabled)
   const autoImportEnabled = vscode.workspace.getConfiguration('kiroSpecsDashboard').get<boolean>('autoImportGitData', true);
   
@@ -107,7 +117,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         // Directly scan for specs using the scanner (bypasses webview visibility check)
         const scanner = provider.getScanner();
-        const specs = await scanner.scanWorkspace();
+        const specs = await scanner.scanWorkspace(specDirectories);
         
         provider.getOutputChannel().appendLine(`[${new Date().toISOString()}] Auto-import: Found ${specs.length} spec(s)`);
         
@@ -295,23 +305,23 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
-  // Set up file system watcher for spec files with debouncing
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    '**/.kiro/specs/**/*.md'
-  );
+  // Set up file system watchers for spec files with debouncing
+  let specWatchers: vscode.FileSystemWatcher[] = [];
+
+  const createSpecWatchers = (dirs: string[]): vscode.FileSystemWatcher[] => {
+    return dirs.map(dir => {
+      const pattern = `**/${dir}/**/*.md`;
+      return vscode.workspace.createFileSystemWatcher(pattern);
+    });
+  };
 
   // Debounce timer to avoid excessive re-parsing during rapid file changes
   let debounceTimer: NodeJS.Timeout | undefined;
-  const DEBOUNCE_DELAY_MS = 300; // Wait 300ms after last change before refreshing
+  const DEBOUNCE_DELAY_MS = 300;
 
   /**
    * Debounced refresh function
-   * Delays the refresh until no file changes have occurred for DEBOUNCE_DELAY_MS
-   * This prevents excessive re-parsing when multiple files are saved rapidly
-   * 
-   * Also detects task changes and records velocity data
-   * 
-   * Requirements: 3.1, 13.1 (debouncing for performance), 19.2 (velocity tracking)
+   * Requirements: 3.1, 13.1, 19.2
    */
   const debouncedRefresh = (uri?: vscode.Uri) => {
     if (debounceTimer) {
@@ -324,9 +334,33 @@ export function activate(context: vscode.ExtensionContext): void {
     }, DEBOUNCE_DELAY_MS);
   };
 
-  watcher.onDidChange((uri) => debouncedRefresh(uri));
-  watcher.onDidCreate((uri) => debouncedRefresh(uri));
-  watcher.onDidDelete((uri) => debouncedRefresh(uri));
+  const attachWatcherListeners = (watchers: vscode.FileSystemWatcher[]) => {
+    for (const watcher of watchers) {
+      watcher.onDidChange((uri) => debouncedRefresh(uri));
+      watcher.onDidCreate((uri) => debouncedRefresh(uri));
+      watcher.onDidDelete((uri) => debouncedRefresh(uri));
+    }
+  };
+
+  specWatchers = createSpecWatchers(specDirectories);
+  attachWatcherListeners(specWatchers);
+
+  // Listen for configuration changes to specDirectories
+  const configChangeListener = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('kiroSpecsDashboard.specDirectories')) {
+      // Dispose old watchers
+      for (const w of specWatchers) {
+        w.dispose();
+      }
+      // Re-read setting and recreate watchers
+      specDirectories = getSpecDirectories();
+      provider.setSpecDirectories(specDirectories);
+      specWatchers = createSpecWatchers(specDirectories);
+      attachWatcherListeners(specWatchers);
+      // Trigger a refresh with the new directories
+      provider.refresh();
+    }
+  });
 
   // Set up file system watcher for execution profiles
   // Requirements: 11.4 (detect external changes to profiles file)
@@ -379,9 +413,15 @@ export function activate(context: vscode.ExtensionContext): void {
     migrateVelocityDataCommand,
     openProfilesCommand,
     openAnalyticsCommand,
-    watcher,
     profilesWatcher,
     workspaceFoldersChangeListener,
+    configChangeListener,
+    // Dispose of spec watchers on deactivation
+    new vscode.Disposable(() => {
+      for (const w of specWatchers) {
+        w.dispose();
+      }
+    }),
     // Dispose of debounce timer on deactivation
     new vscode.Disposable(() => {
       if (debounceTimer) {

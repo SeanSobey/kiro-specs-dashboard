@@ -28,6 +28,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
   private isWebviewVisible: boolean = false;
   private pendingRefresh: boolean = false;
   private notesPanels: Map<string, vscode.WebviewPanel> = new Map();
+  private specDirectories: string[] = ['.kiro/specs'];
 
   constructor(private context: vscode.ExtensionContext) {
     this.scanner = new SpecScanner();
@@ -81,6 +82,18 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    */
   setHistoryPanelManager(historyPanelManager: any): void {
     this.historyPanelManager = historyPanelManager;
+  }
+
+  /**
+   * Set the spec directories to scan.
+   * Called from extension.ts when the setting is read or changes at runtime.
+   * 
+   * Requirements: 2.5, 2.6, 3.7
+   */
+  setSpecDirectories(directories: string[]): void {
+    this.specDirectories = directories && directories.length > 0
+      ? directories
+      : ['.kiro/specs'];
   }
 
   /**
@@ -259,7 +272,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       const previousSpecs = new Map(this.specs.map(spec => [spec.name, spec]));
       
       const previousCount = this.specs.length;
-      this.specs = await this.scanner.scanWorkspace();
+      this.specs = await this.scanner.scanWorkspace(this.specDirectories);
       const currentCount = this.specs.length;
 
       this.outputChannel.appendLine(`[${new Date().toISOString()}] Loaded ${currentCount} spec(s) (previously ${previousCount})`);

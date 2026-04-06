@@ -10,6 +10,7 @@ export interface SpecFile {
   name: string;              // Spec directory name (kebab-case)
   path: string;              // Absolute file system path
   workspaceFolder?: string;  // Workspace folder name (for multi-root)
+  group?: string;            // Relative path from spec root to parent dir (e.g., "auth" for .kiro/specs/auth/login-feature/)
 
   // Content
   tasksContent?: string;         // Raw markdown content

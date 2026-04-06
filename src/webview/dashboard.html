@@ -203,6 +203,55 @@
             margin: 0;
         }
 
+        /* Spec Group Headers */
+        .spec-group-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--vscode-sideBarSectionHeader-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            cursor: pointer;
+            user-select: none;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .spec-group-header:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+
+        .spec-group-header .codicon {
+            font-size: 12px;
+            transition: transform 0.15s ease;
+        }
+
+        .spec-group-header.collapsed .codicon {
+            transform: rotate(-90deg);
+        }
+
+        .spec-group-header .group-count {
+            font-weight: 400;
+            color: var(--vscode-descriptionForeground);
+            margin-left: auto;
+            font-size: 10px;
+        }
+
+        .spec-group-items.collapsed {
+            display: none;
+        }
+
+        .spec-group-items .spec-group-header {
+            padding-left: calc(12px + var(--group-depth, 0) * 16px);
+        }
+
+        .spec-group-items .spec-item {
+            padding-left: calc(12px + var(--group-depth, 0) * 16px);
+        }
+
         .spec-item {
             border-bottom: 1px solid var(--vscode-panel-border);
             padding: 12px 12px 16px 12px;
@@ -1976,6 +2025,7 @@
         
         let allSpecs = [];
         let filteredSpecs = [];
+        let collapsedGroups = new Set(); // Track collapsed group names
         let executionProfiles = [];
         let executionStates = {};
         
@@ -2220,7 +2270,8 @@
                 if (currentState.searchQuery) {
                     const query = currentState.searchQuery.toLowerCase();
                     const displayName = formatDisplayName(spec.name).toLowerCase();
-                    return displayName.includes(query) || spec.name.toLowerCase().includes(query);
+                    const groupName = (spec.group || '').toLowerCase();
+                    return displayName.includes(query) || spec.name.toLowerCase().includes(query) || groupName.includes(query);
                 }
                 
                 return true;
@@ -2239,19 +2290,13 @@
             let listHTML = '';
             
             if (currentState.itemsPerPage === 'all') {
-                // Show all specs without pagination
                 pageSpecs = filteredSpecs;
-                listHTML = pageSpecs.map(spec => createSpecListItem(spec)).join('');
                 paginationContainer.innerHTML = '';
             } else {
-                // Show paginated specs
                 const startIndex = (page - 1) * currentState.itemsPerPage;
                 const endIndex = startIndex + currentState.itemsPerPage;
                 pageSpecs = filteredSpecs.slice(startIndex, endIndex);
                 
-                listHTML = pageSpecs.map(spec => createSpecListItem(spec)).join('');
-                
-                // Add pagination controls
                 const totalPages = Math.ceil(filteredSpecs.length / currentState.itemsPerPage);
                 if (totalPages > 1) {
                     paginationContainer.innerHTML = createPaginationControls(page, totalPages);
@@ -2260,8 +2305,97 @@
                 }
             }
 
+            // Build a nested group tree from specs
+            const groupTree = { specs: [], children: new Map() }; // root node
+            
+            for (const spec of pageSpecs) {
+                if (spec.group) {
+                    const segments = spec.group.split('/');
+                    let node = groupTree;
+                    for (const seg of segments) {
+                        if (!node.children.has(seg)) {
+                            node.children.set(seg, { specs: [], children: new Map() });
+                        }
+                        node = node.children.get(seg);
+                    }
+                    node.specs.push(spec);
+                } else {
+                    groupTree.specs.push(spec);
+                }
+            }
+
+            // Count all specs under a tree node (recursive)
+            function countSpecs(node) {
+                let count = node.specs.length;
+                for (const child of node.children.values()) {
+                    count += countSpecs(child);
+                }
+                return count;
+            }
+
+            // Render a group tree node recursively
+            function renderGroupNode(node, depth) {
+                let html = '';
+                // Render direct specs at this level
+                html += node.specs.map(spec => createSpecListItem(spec)).join('');
+                // Render child groups sorted alphabetically
+                const sortedKeys = Array.from(node.children.keys()).sort();
+                for (const key of sortedKeys) {
+                    const child = node.children.get(key);
+                    const fullPath = getGroupFullPath(node, key, depth);
+                    const displayName = formatDisplayName(key);
+                    const total = countSpecs(child);
+                    const isCollapsed = collapsedGroups.has(fullPath);
+                    const depthPx = depth * 16;
+
+                    html += `
+                        <li class="spec-group-header ${isCollapsed ? 'collapsed' : ''}" 
+                            data-group="${escapeHtml(fullPath)}" 
+                            style="padding-left: ${12 + depthPx}px;">
+                            <span class="codicon codicon-chevron-down"></span>
+                            ${escapeHtml(displayName)}
+                            <span class="group-count">${total}</span>
+                        </li>
+                        <div class="spec-group-items ${isCollapsed ? 'collapsed' : ''}" 
+                             data-group-items="${escapeHtml(fullPath)}">
+                            ${renderGroupNode(child, depth + 1)}
+                        </div>
+                    `;
+                }
+                return html;
+            }
+
+            // Helper to reconstruct the full group path for collapse tracking
+            // We build it by walking the tree during rendering
+            const groupPathStack = [];
+            function getGroupFullPath(parentNode, key, depth) {
+                groupPathStack[depth] = key;
+                return groupPathStack.slice(0, depth + 1).join('/');
+            }
+
+            // Render ungrouped specs first, then the group tree
+            listHTML = renderGroupNode(groupTree, 0);
+
             specList.innerHTML = listHTML;
             
+            // Attach group toggle listeners
+            specList.querySelectorAll('.spec-group-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const group = header.getAttribute('data-group');
+                    const items = specList.querySelector(`[data-group-items="${group}"]`);
+                    header.classList.toggle('collapsed');
+                    if (items) {
+                        items.classList.toggle('collapsed');
+                    }
+                    // Remember collapsed state
+                    if (header.classList.contains('collapsed')) {
+                        collapsedGroups.add(group);
+                    } else {
+                        collapsedGroups.delete(group);
+                    }
+                });
+            });
+
             // Add event listeners to file open buttons
             attachFileOpenListeners();
             
@@ -2293,7 +2427,8 @@
                 : '';
             
             // Show relative path from workspace root
-            const relativePath = `.kiro/specs/${spec.name}`;
+            const groupPrefix = spec.group ? spec.group + '/' : '';
+            const relativePath = `${groupPrefix}${spec.name}`;
 
             // Show workspace folder in brackets for multi-root workspaces
             const workspaceFolderDisplay = spec.workspaceFolder 
