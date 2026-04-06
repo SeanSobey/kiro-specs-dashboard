@@ -2,7 +2,7 @@
   "name": "kiro-specs-dashboard",
   "displayName": "Kiro Specs Dashboard",
   "description": "Extension for visualizing and tracking Kiro spec features and tasks.",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "publisher": "grg-lab",
   "author": {
     "name": "grg-lab"
@@ -128,6 +128,14 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically import velocity data from Git history when opening a workspace for the first time"
+        },
+        "kiroSpecsDashboard.specDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [".kiro/specs"],
+          "description": "Directories to scan for spec files, relative to each workspace folder root. Supports multiple directories."
         }
       }
     }
