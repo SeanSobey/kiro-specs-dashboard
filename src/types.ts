@@ -23,6 +23,9 @@ export interface SpecFile {
   optionalTasks: number;    // Optional task count (marked with *)
   progress: number;         // Percentage (0-100)
 
+  // Extra files
+  extraFiles?: string[];     // Additional .md files beyond tasks/requirements/design
+
   // Metadata
   lastModified?: Date;      // Last modification timestamp
 }

@@ -221,6 +221,21 @@ export class SpecScanner {
         vscode.Uri.joinPath(specPath, 'design.md')
       );
 
+      // Discover extra .md files beyond the standard ones
+      const standardFiles = new Set(['tasks.md', 'requirements.md', 'design.md']);
+      const extraFiles: string[] = [];
+      try {
+        const entries = await vscode.workspace.fs.readDirectory(specPath);
+        for (const [fileName, fileType] of entries) {
+          if (fileType === vscode.FileType.File && fileName.endsWith('.md') && !standardFiles.has(fileName)) {
+            extraFiles.push(fileName);
+          }
+        }
+        extraFiles.sort();
+      } catch (error) {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Could not list extra files in ${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
       // Get last modified timestamp from tasks.md
       let lastModified: Date | undefined;
       try {
@@ -241,6 +256,7 @@ export class SpecScanner {
         tasksContent,
         requirementsContent,
         designContent,
+        extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
         lastModified,
         ...taskStats
       };
