@@ -3,6 +3,18 @@
  */
 
 /**
+ * Metadata for an extra markdown file in a spec folder.
+ * Task-like files have parsed task statistics.
+ */
+export interface ExtraFileMetadata {
+  fileName: string;           // e.g., "test-cases.md"
+  isTaskLike: boolean;        // true if file contains checkbox lines
+  totalTasks?: number;        // only present if isTaskLike
+  completedTasks?: number;    // only present if isTaskLike
+  optionalTasks?: number;     // only present if isTaskLike
+}
+
+/**
  * Represents a spec file with its content and metadata
  */
 export interface SpecFile {
@@ -25,6 +37,10 @@ export interface SpecFile {
 
   // Extra files
   extraFiles?: string[];     // Additional .md files beyond tasks/requirements/design
+  extraFilesMetadata?: ExtraFileMetadata[];  // Rich metadata for extra files (includes task stats)
+
+  // Per-file task stats for tasks.md (before aggregation with extra files)
+  tasksFileStats?: { totalTasks: number; completedTasks: number; optionalTasks: number; progress: number };
 
   // Metadata
   lastModified?: Date;      // Last modification timestamp
@@ -85,6 +101,7 @@ export type NoteSortOption = 'recently-updated' | 'recently-created' | 'oldest-f
 export type WebviewMessage =
   | { type: 'requestSpecs' }
   | { type: 'toggleTask'; specName: string; taskLine: number }
+  | { type: 'toggleExtraFileTask'; specName: string; fileName: string; taskLine: number }
   | { type: 'openFile'; filePath: string }
   | { type: 'saveState'; state: DashboardState }
   | { type: 'addNote'; specName: string; text: string }

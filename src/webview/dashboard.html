@@ -252,6 +252,18 @@
             padding-left: calc(12px + var(--group-depth, 0) * 16px);
         }
 
+        .group-summary-card {
+            border-left: 3px solid var(--vscode-progressBar-background);
+            opacity: 0.85;
+            background: var(--vscode-sideBarSectionHeader-background);
+        }
+
+        .group-summary-card .spec-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+        }
+
         .spec-item {
             border-bottom: 1px solid var(--vscode-panel-border);
             padding: 12px 12px 16px 12px;
@@ -371,6 +383,90 @@
             margin-top: 12px;
         }
 
+        /* Extra task-like files breakdown */
+        .extra-files-breakdown {
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .file-stats-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            font-family: var(--vscode-editor-font-family);
+            margin-top: 4px;
+        }
+
+        .file-stats-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .file-stats-label .codicon {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .file-stats-values {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-progress-bar {
+            height: 4px;
+            background: rgba(128, 128, 128, 0.2);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 2px;
+            margin-bottom: 4px;
+            position: relative;
+        }
+
+        .file-progress-fill {
+            height: 100%;
+            background: var(--vscode-progressBar-background);
+            border-radius: 3px;
+            transition: width 0.2s;
+        }
+
+        .extra-file-row {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .extra-file-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .extra-file-info .codicon {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .extra-file-name {
+            cursor: pointer;
+            color: var(--vscode-textLink-foreground);
+        }
+
+        .extra-file-name:hover {
+            text-decoration: underline;
+            color: var(--vscode-textLink-activeForeground);
+        }
+
         .action-btn {
             padding: 2px 8px;
             background: transparent;
@@ -479,6 +575,24 @@
             font-size: 14px;
         }
 
+        .execution-dropdown-stat {
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .execution-dropdown-stat .codicon {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .execution-dropdown-stat .extra-file-progress {
+            margin-left: auto;
+        }
+
         .more-dropdown {
             position: absolute;
             top: 100%;
@@ -516,6 +630,16 @@
             height: 1px;
             background: var(--vscode-dropdown-border);
             margin: 4px 0;
+        }
+
+        .extra-file-progress {
+            margin-left: auto;
+            font-size: 11px;
+            opacity: 0.8;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 1px 6px;
+            border-radius: 8px;
         }
 
         .execution-status {
@@ -2372,6 +2496,55 @@
                 return count;
             }
 
+            // Collect all specs under a tree node (recursive)
+            function collectSpecs(node) {
+                let all = [...node.specs];
+                for (const child of node.children.values()) {
+                    all = all.concat(collectSpecs(child));
+                }
+                return all;
+            }
+
+            // Create a group summary card
+            function createGroupSummaryCard(groupName, specs) {
+                if (specs.length <= 1) return '';
+                let total = 0, completed = 0, optional = 0;
+                let done = 0, active = 0, todo = 0;
+                for (const s of specs) {
+                    total += s.totalTasks || 0;
+                    completed += s.completedTasks || 0;
+                    optional += s.optionalTasks || 0;
+                    if (s.progress === 100) done++;
+                    else if (s.progress > 0) active++;
+                    else todo++;
+                }
+                const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                let badge = '';
+                if (pct === 100) badge = '<span class="spec-badge">DONE</span>';
+                else if (pct > 0) badge = '<span class="spec-badge">ACTIVE</span>';
+                else badge = '<span class="spec-badge">TODO</span>';
+
+                return `
+                    <li class="spec-item group-summary-card">
+                        <div class="spec-item-header">
+                            <div class="spec-name">${escapeHtml(formatDisplayName(groupName))} — Summary</div>
+                        </div>
+                        <div class="spec-stats">
+                            ${badge}
+                            <div class="spec-stat"><span>${pct}%</span></div>
+                            <div class="spec-stat"><span>${completed}/${total} tasks</span></div>
+                            ${optional > 0 ? `<div class="spec-stat"><span>${optional} optional</span></div>` : ''}
+                            <div class="spec-stat"><span>${specs.length} specs</span></div>
+                            <div class="spec-stat"><span>${done} done</span></div>
+                            <div class="spec-stat"><span>${active} active</span></div>
+                            <div class="spec-stat"><span>${todo} todo</span></div>
+                        </div>
+                        <div class="spec-progress-bar">
+                            <div class="spec-progress-fill" style="width: ${pct}%"></div>
+                        </div>
+                    </li>`;
+            }
+
             // Render a group tree node recursively
             function renderGroupNode(node, depth) {
                 let html = '';
@@ -2397,6 +2570,7 @@
                         </li>
                         <div class="spec-group-items ${isCollapsed ? 'collapsed' : ''}" 
                              data-group-items="${escapeHtml(fullPath)}">
+                            ${createGroupSummaryCard(key, collectSpecs(child))}
                             ${renderGroupNode(child, depth + 1)}
                         </div>
                     `;
@@ -2487,6 +2661,74 @@
                 </div>
             `;
 
+            // Build extra task-like file breakdown rows
+            let extraFilesBreakdownHTML = '';
+            const taskLikeFiles = (spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
+
+            // Build per-file status rows (tasks.md + each extra task-like file)
+            const hasExtraTaskFiles = taskLikeFiles.length > 0;
+            let perFileStatsHTML = '';
+            if (hasExtraTaskFiles) {
+                // tasks.md row
+                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, optionalTasks: 0, progress: 0 };
+                let tBadge = '';
+                if (tfs.progress === 100) { tBadge = '<span class="spec-badge">DONE</span>'; }
+                else if (tfs.progress > 0) { tBadge = '<span class="spec-badge">ACTIVE</span>'; }
+                else { tBadge = '<span class="spec-badge">TODO</span>'; }
+
+                perFileStatsHTML += `
+                    <div class="file-stats-row">
+                        <span class="file-stats-label"><span class="codicon codicon-list-unordered"></span> tasks</span>
+                        <div class="file-stats-values">
+                            ${tBadge}
+                            <span>${tfs.progress}%</span>
+                            <span>${tfs.completedTasks}/${tfs.totalTasks} tasks</span>
+                            ${tfs.optionalTasks > 0 ? `<span>${tfs.optionalTasks} optional</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="file-progress-bar">
+                        <div class="file-progress-fill" style="width: ${tfs.progress}%"></div>
+                    </div>`;
+
+                // Extra file rows
+                taskLikeFiles.forEach(meta => {
+                    const fTotal = meta.totalTasks || 0;
+                    const fCompleted = meta.completedTasks || 0;
+                    const fOptional = meta.optionalTasks || 0;
+                    const fPct = fTotal > 0 ? Math.round((fCompleted / fTotal) * 100) : 0;
+                    const fName = (meta.fileName || '').replace(/\.md$/, '');
+                    let fBadge = '';
+                    if (fPct === 100) { fBadge = '<span class="spec-badge">DONE</span>'; }
+                    else if (fPct > 0) { fBadge = '<span class="spec-badge">ACTIVE</span>'; }
+                    else { fBadge = '<span class="spec-badge">TODO</span>'; }
+
+                    perFileStatsHTML += `
+                        <div class="file-stats-row">
+                            <span class="file-stats-label extra-file-name" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}"><span class="codicon codicon-checklist"></span> ${escapeHtml(fName)}</span>
+                            <div class="file-stats-values">
+                                ${fBadge}
+                                <span>${fPct}%</span>
+                                <span>${fCompleted}/${fTotal} tasks</span>
+                                ${fOptional > 0 ? `<span>${fOptional} optional</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="file-progress-bar">
+                            <div class="file-progress-fill" style="width: ${fPct}%"></div>
+                        </div>`;
+                });
+            }
+
+            // Build extra file action buttons (task-like files get their own buttons)
+            let extraFileActionsHTML = '';
+            if (taskLikeFiles.length > 0) {
+                extraFileActionsHTML = taskLikeFiles.map(meta => {
+                    const fName = (meta.fileName || '').replace(/\.md$/, '');
+                    return `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}">
+                            <span class="codicon codicon-checklist"></span> ${escapeHtml(fName)}
+                        </button>`;
+                }).join('');
+            }
+
             return `
                 <li class="spec-item">
                     <div class="spec-item-header">
@@ -2507,6 +2749,7 @@
                     <div class="spec-progress-bar">
                         <div class="spec-progress-fill" style="width: ${progress}%"></div>
                     </div>
+                    ${perFileStatsHTML}
                     <div class="spec-actions">
                         <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="requirements.md" title="Open requirements.md">
                             <span class="codicon codicon-file"></span> Requirements
@@ -2517,6 +2760,7 @@
                         <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="tasks.md" title="Open tasks.md">
                             <span class="codicon codicon-list-unordered"></span> Tasks
                         </button>
+                        ${extraFileActionsHTML}
                         <div class="more-btn-wrapper" style="position: relative; display: inline-block;">
                             <button class="action-btn more-btn" data-spec="${escapeHtml(spec.name)}" title="More files">
                                 <span class="codicon codicon-ellipsis"></span> More
@@ -2671,6 +2915,19 @@
                     }
                 });
             });
+
+            // Attach extra file name click listeners (inline breakdown links)
+            const extraFileNames = document.querySelectorAll('.extra-file-name');
+            extraFileNames.forEach(el => {
+                el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const specName = this.getAttribute('data-spec');
+                    const fileName = this.getAttribute('data-file');
+                    if (specName && fileName) {
+                        openSpecFile(specName, fileName);
+                    }
+                });
+            });
         }
         
         // Show More dropdown for extra files and notes
@@ -2704,22 +2961,31 @@
             // Extra files from the spec
             const spec = allSpecs.find(s => s.name === specName);
             if (spec && spec.extraFiles && spec.extraFiles.length > 0) {
-                const separator = document.createElement('div');
-                separator.className = 'more-dropdown-separator';
-                dropdown.appendChild(separator);
-
-                spec.extraFiles.forEach(fileName => {
-                    const item = document.createElement('div');
-                    item.className = 'more-dropdown-item';
-                    const displayName = fileName.replace(/\.md$/, '');
-                    item.innerHTML = `<span class="codicon codicon-markdown"></span> ${escapeHtml(displayName)}`;
-                    item.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        openSpecFile(specName, fileName);
-                        dropdown.remove();
-                    });
-                    dropdown.appendChild(item);
+                // Filter to only non-task-like files (task-like ones have their own UI)
+                const nonTaskFiles = spec.extraFiles.filter(fileName => {
+                    const meta = spec.extraFilesMetadata && spec.extraFilesMetadata.find(m => m.fileName === fileName);
+                    return !(meta && meta.isTaskLike);
                 });
+
+                if (nonTaskFiles.length > 0) {
+                    const separator = document.createElement('div');
+                    separator.className = 'more-dropdown-separator';
+                    dropdown.appendChild(separator);
+
+                    nonTaskFiles.forEach(fileName => {
+                        const item = document.createElement('div');
+                        item.className = 'more-dropdown-item';
+                        const displayName = fileName.replace(/\.md$/, '');
+                        item.innerHTML = `<span class="codicon codicon-markdown"></span> ${escapeHtml(displayName)}`;
+
+                        item.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            openSpecFile(specName, fileName);
+                            dropdown.remove();
+                        });
+                        dropdown.appendChild(item);
+                    });
+                }
             }
 
             wrapper.appendChild(dropdown);
@@ -2764,6 +3030,33 @@
                 });
                 dropdown.appendChild(item);
             });
+
+            // Show task-like file progress in the dropdown
+            const spec = allSpecs.find(s => s.name === specId);
+            const taskLikeMeta = (spec && spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
+            if (spec && taskLikeMeta.length > 0) {
+                const separator = document.createElement('div');
+                separator.className = 'more-dropdown-separator';
+                dropdown.appendChild(separator);
+
+                // tasks.md row
+                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, progress: 0 };
+                const tasksRow = document.createElement('div');
+                tasksRow.className = 'execution-dropdown-stat';
+                tasksRow.innerHTML = `<span class="codicon codicon-list-unordered"></span> tasks <span class="extra-file-progress">${tfs.completedTasks}/${tfs.totalTasks}</span>`;
+                dropdown.appendChild(tasksRow);
+
+                // Extra file rows
+                taskLikeMeta.forEach(meta => {
+                    const fTotal = meta.totalTasks || 0;
+                    const fCompleted = meta.completedTasks || 0;
+                    const fName = (meta.fileName || '').replace(/\.md$/, '');
+                    const row = document.createElement('div');
+                    row.className = 'execution-dropdown-stat';
+                    row.innerHTML = `<span class="codicon codicon-checklist"></span> ${escapeHtml(fName)} <span class="extra-file-progress">${fCompleted}/${fTotal}</span>`;
+                    dropdown.appendChild(row);
+                });
+            }
 
             // Position and show dropdown
             wrapper.appendChild(dropdown);

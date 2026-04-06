@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SpecFile } from './types';
+import { SpecFile, ExtraFileMetadata } from './types';
 
 const DEFAULT_SPEC_DIRECTORIES = ['.kiro/specs'];
 
@@ -223,18 +223,21 @@ export class SpecScanner {
 
       // Discover extra .md files beyond the standard ones
       const standardFiles = new Set(['tasks.md', 'requirements.md', 'design.md']);
-      const extraFiles: string[] = [];
+      const extraFileNames: string[] = [];
       try {
         const entries = await vscode.workspace.fs.readDirectory(specPath);
         for (const [fileName, fileType] of entries) {
           if (fileType === vscode.FileType.File && fileName.endsWith('.md') && !standardFiles.has(fileName)) {
-            extraFiles.push(fileName);
+            extraFileNames.push(fileName);
           }
         }
-        extraFiles.sort();
+        extraFileNames.sort();
       } catch (error) {
         this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Could not list extra files in ${name}: ${error instanceof Error ? error.message : String(error)}`);
       }
+
+      // Parse extra files for task-like content
+      const extraFilesMetadata = await this.parseExtraFiles(specPath, extraFileNames);
 
       // Get last modified timestamp from tasks.md
       let lastModified: Date | undefined;
@@ -245,8 +248,25 @@ export class SpecScanner {
         this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Could not get last modified time for ${name}/tasks.md`);
       }
 
-      // Parse task statistics
+      // Parse task statistics from tasks.md
       const taskStats = this.parseTaskStats(tasksContent);
+
+      // Aggregate task stats from extra task-like files
+      let aggregatedTotal = taskStats.totalTasks;
+      let aggregatedCompleted = taskStats.completedTasks;
+      let aggregatedOptional = taskStats.optionalTasks;
+
+      for (const meta of extraFilesMetadata) {
+        if (meta.isTaskLike) {
+          aggregatedTotal += meta.totalTasks!;
+          aggregatedCompleted += meta.completedTasks!;
+          aggregatedOptional += meta.optionalTasks!;
+        }
+      }
+
+      const aggregatedProgress = aggregatedTotal > 0
+        ? Math.round((aggregatedCompleted / aggregatedTotal) * 100)
+        : 0;
 
       return {
         name,
@@ -256,9 +276,14 @@ export class SpecScanner {
         tasksContent,
         requirementsContent,
         designContent,
-        extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
+        extraFiles: extraFileNames.length > 0 ? extraFileNames : undefined,
+        extraFilesMetadata: extraFilesMetadata.length > 0 ? extraFilesMetadata : undefined,
+        tasksFileStats: taskStats,
         lastModified,
-        ...taskStats
+        totalTasks: aggregatedTotal,
+        completedTasks: aggregatedCompleted,
+        optionalTasks: aggregatedOptional,
+        progress: aggregatedProgress
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -268,6 +293,43 @@ export class SpecScanner {
       }
       return null;
     }
+  }
+
+  /**
+   * Parse extra markdown files in a spec directory for task-like content.
+   * Files with one or more checkbox lines are classified as task-like.
+   * 
+   * @param specPath The URI of the spec directory
+   * @param extraFileNames Array of extra file names to parse
+   * @returns Promise resolving to array of ExtraFileMetadata
+   */
+  private async parseExtraFiles(
+    specPath: vscode.Uri,
+    extraFileNames: string[]
+  ): Promise<ExtraFileMetadata[]> {
+    const metadata: ExtraFileMetadata[] = [];
+    for (const fileName of extraFileNames) {
+      const fileUri = vscode.Uri.joinPath(specPath, fileName);
+      const content = await this.readFile(fileUri);
+      if (content === undefined) {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Could not read extra file ${fileName}, treating as non-task`);
+        metadata.push({ fileName, isTaskLike: false });
+        continue;
+      }
+      const stats = this.parseTaskStats(content);
+      if (stats.totalTasks > 0) {
+        metadata.push({
+          fileName,
+          isTaskLike: true,
+          totalTasks: stats.totalTasks,
+          completedTasks: stats.completedTasks,
+          optionalTasks: stats.optionalTasks,
+        });
+      } else {
+        metadata.push({ fileName, isTaskLike: false });
+      }
+    }
+    return metadata;
   }
 
   /**

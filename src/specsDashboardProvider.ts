@@ -362,6 +362,19 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
           await this.toggleTask(sanitizedSpecName, message.taskLine);
           break;
 
+        case 'toggleExtraFileTask':
+          // Validate and sanitize input
+          if (typeof message.specName !== 'string' || typeof message.fileName !== 'string' || typeof message.taskLine !== 'number') {
+            this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Invalid toggleExtraFileTask message parameters`);
+            return;
+          }
+          await this.toggleExtraFileTask(
+            this.sanitizeFileName(message.specName),
+            this.sanitizeFileName(message.fileName),
+            message.taskLine
+          );
+          break;
+
         case 'openFile':
           // Validate and sanitize input (Requirement 10.5)
           if (typeof message.filePath !== 'string') {
@@ -1185,6 +1198,147 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
           this.outputChannel.show();
         }
       });
+    }
+  }
+
+  /**
+   * Toggle a task checkbox in an extra file within a spec folder.
+   * Similar to toggleTask but targets a named extra file instead of tasks.md.
+   */
+  private async toggleExtraFileTask(specName: string, fileName: string, taskLine: number): Promise<void> {
+    this.outputChannel.appendLine(`[${new Date().toISOString()}] Toggle extra file task: ${specName}/${fileName}, line ${taskLine}`);
+
+    try {
+      const spec = this.specs.find(s => s.name === specName);
+      if (!spec) {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: Spec not found: ${specName}`);
+        vscode.window.showErrorMessage(`Spec not found: ${specName}`);
+        return;
+      }
+
+      const fileUri = vscode.Uri.file(`${spec.path}/${fileName}`);
+
+      // Read the extra file
+      let content: string;
+      try {
+        const bytes = await vscode.workspace.fs.readFile(fileUri);
+        content = Buffer.from(bytes).toString('utf8');
+      } catch {
+        const errorMsg = `File not found: ${specName}/${fileName}`;
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: ${errorMsg}`);
+        vscode.window.showErrorMessage(errorMsg);
+        return;
+      }
+
+      const lines = content.split('\n');
+
+      if (taskLine < 0 || taskLine >= lines.length) {
+        const errorMsg = `Invalid task line number: ${taskLine} (file has ${lines.length} lines)`;
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: ${errorMsg}`);
+        vscode.window.showErrorMessage(errorMsg);
+        return;
+      }
+
+      const line = lines[taskLine];
+
+      if (!line.match(/^(\s*)-\s*\[([ x])\](\*)?/)) {
+        const errorMsg = `Line ${taskLine} is not a task checkbox: "${line.trim()}"`;
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: ${errorMsg}`);
+        vscode.window.showErrorMessage(errorMsg);
+        return;
+      }
+
+      const taskMatch = line.match(/^(\s*)-\s*\[([ x])\](\*)?/);
+      const wasCompleted = taskMatch![2] === 'x';
+      const isOptional = taskMatch![3] === '*';
+      const isRequired = !isOptional;
+
+      let updatedLine: string;
+      let isNowCompleted: boolean;
+      if (line.includes('- [x]')) {
+        updatedLine = line.replace(/- \[x\]/, '- [ ]');
+        isNowCompleted = false;
+      } else if (line.includes('- [ ]')) {
+        updatedLine = line.replace(/- \[ \]/, '- [x]');
+        isNowCompleted = true;
+      } else {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: Could not parse checkbox state on line ${taskLine}`);
+        return;
+      }
+
+      lines[taskLine] = updatedLine;
+      const updatedContent = lines.join('\n');
+
+      try {
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(updatedContent, 'utf8'));
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] Successfully toggled task on line ${taskLine} in ${specName}/${fileName}`);
+      } catch (writeError) {
+        const errorMsg = writeError instanceof Error ? writeError.message : String(writeError);
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: Failed to write file: ${errorMsg}`);
+        vscode.window.showErrorMessage(`Failed to save task changes to ${specName}/${fileName}: ${errorMsg}`);
+        return;
+      }
+
+      // Recalculate the extra file's stats and update the spec's aggregate metrics
+      const newFileStats = this.recalculateTaskStats(updatedContent);
+      if (spec.extraFilesMetadata) {
+        const meta = spec.extraFilesMetadata.find(m => m.fileName === fileName);
+        if (meta && meta.isTaskLike) {
+          // Subtract old stats, add new stats
+          spec.totalTasks = spec.totalTasks - (meta.totalTasks || 0) + newFileStats.totalTasks;
+          spec.completedTasks = spec.completedTasks - (meta.completedTasks || 0) + newFileStats.completedTasks;
+          spec.optionalTasks = spec.optionalTasks - (meta.optionalTasks || 0) + newFileStats.optionalTasks;
+          spec.progress = spec.totalTasks > 0 ? Math.round((spec.completedTasks / spec.totalTasks) * 100) : 0;
+
+          meta.totalTasks = newFileStats.totalTasks;
+          meta.completedTasks = newFileStats.completedTasks;
+          meta.optionalTasks = newFileStats.optionalTasks;
+        }
+      }
+
+      // Record velocity for task completion
+      if (isNowCompleted && !wasCompleted) {
+        try {
+          const taskId = `${fileName}-line-${taskLine}`;
+          const { getFileAuthor } = await import('./gitUtils');
+          const author = await getFileAuthor(fileUri.fsPath);
+
+          await this.velocityCalculator.recordTaskCompletion(
+            specName,
+            taskId,
+            isRequired,
+            new Date(),
+            line.trim().substring(0, 50),
+            author?.name,
+            author?.email
+          );
+        } catch (velocityError) {
+          this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Failed to record velocity data: ${velocityError}`);
+        }
+      }
+
+      // Update spec progress tracking
+      try {
+        const { getFileAuthor } = await import('./gitUtils');
+        const author = await getFileAuthor(fileUri.fsPath);
+        await this.velocityCalculator.updateSpecProgress(specName, spec.totalTasks, spec.completedTasks, author?.name, author?.email);
+      } catch (velocityError) {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Failed to update spec progress: ${velocityError}`);
+      }
+
+      // Notify analytics
+      try {
+        this.analyticsPanelManager.notifyDataRefreshed(this.specs);
+      } catch { /* non-critical */ }
+
+      // Send immediate update to webview
+      if (this.view) {
+        this.view.webview.postMessage({ type: 'specUpdated', spec });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.outputChannel.appendLine(`[${new Date().toISOString()}] ERROR: Failed to toggle extra file task: ${errorMessage}`);
+      vscode.window.showErrorMessage(`Failed to toggle task: ${errorMessage}`);
     }
   }
 
