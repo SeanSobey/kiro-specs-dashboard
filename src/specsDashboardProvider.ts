@@ -1399,10 +1399,8 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
         return;
       }
       
-      // Open tasks.md in editor mode for editing, other markdown files in preview mode for reading
-      if (filePath.endsWith('tasks.md')) {
-        await vscode.window.showTextDocument(uri);
-      } else if (filePath.endsWith('.md')) {
+      // Open markdown files in preview mode for reading, other files in editor mode
+      if (filePath.endsWith('.md')) {
         await vscode.commands.executeCommand('markdown.showPreview', uri);
       } else {
         await vscode.window.showTextDocument(uri);
