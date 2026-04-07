@@ -593,6 +593,36 @@
             margin-left: auto;
         }
 
+        .execution-dropdown-file-header {
+            padding: 6px 12px 2px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            border-top: 1px solid var(--vscode-dropdown-border);
+        }
+
+        .execution-dropdown-file-header:first-child {
+            border-top: none;
+        }
+
+        .execution-dropdown-file-header .codicon {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .execution-dropdown-file-header .extra-file-progress {
+            margin-left: auto;
+            font-weight: 400;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .execution-dropdown-file-item {
+            padding-left: 24px;
+        }
+
         .more-dropdown {
             position: absolute;
             top: 100%;
@@ -3015,46 +3045,58 @@
             dropdown.className = 'execution-dropdown';
             dropdown.id = 'profile-dropdown';
 
-            // Populate with profiles
-            executionProfiles.forEach(profile => {
-                const item = document.createElement('div');
-                item.className = 'execution-dropdown-item';
-                item.innerHTML = `
-                    <span class="codicon codicon-${escapeHtml(profile.icon || 'rocket')}"></span>
-                    <span>${escapeHtml(profile.name)}</span>
-                `;
-                item.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    executeSpec(specId, profile.id);
-                    closeAllDropdowns();
-                });
-                dropdown.appendChild(item);
-            });
-
-            // Show task-like file progress in the dropdown
+            // Build per-file execution sections
             const spec = allSpecs.find(s => s.name === specId);
             const taskLikeMeta = (spec && spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
-            if (spec && taskLikeMeta.length > 0) {
-                const separator = document.createElement('div');
-                separator.className = 'more-dropdown-separator';
-                dropdown.appendChild(separator);
 
-                // tasks.md row
-                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, progress: 0 };
-                const tasksRow = document.createElement('div');
-                tasksRow.className = 'execution-dropdown-stat';
-                tasksRow.innerHTML = `<span class="codicon codicon-list-unordered"></span> tasks <span class="extra-file-progress">${tfs.completedTasks}/${tfs.totalTasks}</span>`;
-                dropdown.appendChild(tasksRow);
+            // Helper to create a file section with profiles
+            function addFileSection(label, icon, fileName, stats) {
+                const header = document.createElement('div');
+                header.className = 'execution-dropdown-file-header';
+                header.innerHTML = `<span class="codicon codicon-${escapeHtml(icon)}"></span> ${escapeHtml(label)} <span class="extra-file-progress">${stats.completed}/${stats.total}</span>`;
+                dropdown.appendChild(header);
 
-                // Extra file rows
+                executionProfiles.forEach(profile => {
+                    const item = document.createElement('div');
+                    item.className = 'execution-dropdown-item execution-dropdown-file-item';
+                    item.innerHTML = `
+                        <span class="codicon codicon-${escapeHtml(profile.icon || 'rocket')}"></span>
+                        <span>${escapeHtml(profile.name)}</span>
+                    `;
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        executeSpec(specId, profile.id, fileName);
+                        closeAllDropdowns();
+                    });
+                    dropdown.appendChild(item);
+                });
+            }
+
+            if (taskLikeMeta.length > 0) {
+                // tasks.md section
+                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0 };
+                addFileSection('tasks', 'list-unordered', 'tasks.md', { completed: tfs.completedTasks, total: tfs.totalTasks });
+
+                // Extra file sections
                 taskLikeMeta.forEach(meta => {
-                    const fTotal = meta.totalTasks || 0;
-                    const fCompleted = meta.completedTasks || 0;
                     const fName = (meta.fileName || '').replace(/\.md$/, '');
-                    const row = document.createElement('div');
-                    row.className = 'execution-dropdown-stat';
-                    row.innerHTML = `<span class="codicon codicon-checklist"></span> ${escapeHtml(fName)} <span class="extra-file-progress">${fCompleted}/${fTotal}</span>`;
-                    dropdown.appendChild(row);
+                    addFileSection(fName, 'checklist', meta.fileName, { completed: meta.completedTasks || 0, total: meta.totalTasks || 0 });
+                });
+            } else {
+                // No extra files — just show profiles for the whole spec
+                executionProfiles.forEach(profile => {
+                    const item = document.createElement('div');
+                    item.className = 'execution-dropdown-item';
+                    item.innerHTML = `
+                        <span class="codicon codicon-${escapeHtml(profile.icon || 'rocket')}"></span>
+                        <span>${escapeHtml(profile.name)}</span>
+                    `;
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        executeSpec(specId, profile.id);
+                        closeAllDropdowns();
+                    });
+                    dropdown.appendChild(item);
                 });
             }
 
@@ -3074,14 +3116,18 @@
         }
 
         // Execute a spec with a profile
-        function executeSpec(specId, profileId) {
-            console.log('Executing spec:', specId, 'with profile:', profileId);
+        function executeSpec(specId, profileId, targetFile) {
+            console.log('Executing spec:', specId, 'with profile:', profileId, 'targetFile:', targetFile);
             
-            vscode.postMessage({
+            const msg = {
                 type: 'executeSpec',
                 specId: specId,
                 profileId: profileId
-            });
+            };
+            if (targetFile) {
+                msg.targetFile = targetFile;
+            }
+            vscode.postMessage(msg);
         }
 
         // Cancel an execution

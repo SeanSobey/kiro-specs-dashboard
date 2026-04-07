@@ -167,7 +167,8 @@ export class ExecutionManager {
   async executeSpec(
     spec: SpecFile,
     profileId: string,
-    workspaceFolder: vscode.WorkspaceFolder
+    workspaceFolder: vscode.WorkspaceFolder,
+    targetFile?: string
   ): Promise<ExecutionResult> {
     try {
       // Load profile
@@ -213,7 +214,7 @@ export class ExecutionManager {
       // Instantiate template
       let prompt: string;
       try {
-        prompt = this.profileManager.instantiateTemplate(profile, spec);
+        prompt = this.profileManager.instantiateTemplate(profile, spec, targetFile);
       } catch (templateError) {
         const errorMsg = `Template instantiation failed: ${templateError}`;
         this.outputChannel.appendLine(`[ExecutionManager] ${errorMsg}`);

@@ -394,6 +394,7 @@ export interface TemplateVariables {
   remainingTasks: number;        // Number of remaining tasks
   workspaceFolder: string;       // Workspace folder name
   specRelativePath: string;      // Relative path from workspace root
+  targetFile?: string;           // Target file to execute (e.g., "test-cases.md"), defaults to "tasks.md"
 }
 
 /**
@@ -472,7 +473,7 @@ export type AutomatedExecutionWebviewMessage =
   | { type: 'createProfile'; profile: ExecutionProfile }
   | { type: 'updateProfile'; profileId: string; updates: Partial<ExecutionProfile> }
   | { type: 'deleteProfile'; profileId: string }
-  | { type: 'executeSpec'; specId: string; profileId: string }
+  | { type: 'executeSpec'; specId: string; profileId: string; targetFile?: string }
   | { type: 'cancelExecution'; executionId: string }
   | { type: 'getProfiles' }
   | { type: 'getExecutionHistory'; filter?: HistoryFilter }

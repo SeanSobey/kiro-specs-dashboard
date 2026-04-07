@@ -766,7 +766,7 @@ export class ProfileManager {
    * 
    * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 10.4
    */
-  instantiateTemplate(profile: ExecutionProfile, spec: SpecFile): string {
+  instantiateTemplate(profile: ExecutionProfile, spec: SpecFile, targetFile?: string): string {
     try {
       // Build template variables
       const variables: TemplateVariables = {
@@ -776,7 +776,8 @@ export class ProfileManager {
         completedTasks: spec.completedTasks,
         remainingTasks: spec.totalTasks - spec.completedTasks,
         workspaceFolder: this.escapeValue(spec.workspaceFolder || ''),
-        specRelativePath: this.escapeValue(this.getRelativePath(spec))
+        specRelativePath: this.escapeValue(this.getRelativePath(spec)),
+        targetFile: targetFile || 'tasks.md'
       };
       
       // Replace template variables
@@ -790,6 +791,7 @@ export class ProfileManager {
       result = result.replace(/\{\{remainingTasks\}\}/g, String(variables.remainingTasks));
       result = result.replace(/\{\{workspaceFolder\}\}/g, variables.workspaceFolder);
       result = result.replace(/\{\{specRelativePath\}\}/g, variables.specRelativePath);
+      result = result.replace(/\{\{targetFile\}\}/g, variables.targetFile!);
       
       // Unknown variables are left unchanged (Requirement 2.4)
       

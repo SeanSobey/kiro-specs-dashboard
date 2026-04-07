@@ -511,7 +511,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Invalid executeSpec message parameters`);
             return;
           }
-          await this.handleExecuteSpec(message.specId, message.profileId);
+          await this.handleExecuteSpec(message.specId, message.profileId, message.targetFile);
           break;
         
         case 'cancelExecution':
@@ -749,7 +749,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    * 
    * Requirements: 4.1, 4.2
    */
-  private async handleExecuteSpec(specId: string, profileId: string): Promise<void> {
+  private async handleExecuteSpec(specId: string, profileId: string, targetFile?: string): Promise<void> {
     if (!this.executionManager || !this.executionHistory) {
       this.sendError('Execution manager not initialized');
       return;
@@ -771,7 +771,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       }
 
       // Execute the spec
-      const result = await this.executionManager.executeSpec(spec, profileId, workspaceFolder);
+      const result = await this.executionManager.executeSpec(spec, profileId, workspaceFolder, targetFile);
       
       if (result.success && result.executionId) {
         // Get execution state
