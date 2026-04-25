@@ -63,6 +63,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 10,
       completedTasks: 3,
       optionalTasks: 2,
+      completedRequired: 1,
+      completedOptional: 2,
       progress: 30
     };
 
@@ -94,6 +96,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 5,
       completedTasks: 2,
       optionalTasks: 1,
+      completedRequired: 1,
+      completedOptional: 1,
       progress: 40
     };
 
@@ -122,6 +126,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 5,
       completedTasks: 2,
       optionalTasks: 1,
+      completedRequired: 1,
+      completedOptional: 1,
       progress: 40
     };
 
@@ -149,6 +155,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 5,
       completedTasks: 2,
       optionalTasks: 1,
+      completedRequired: 1,
+      completedOptional: 1,
       progress: 40
     };
 
@@ -176,6 +184,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 10,
       completedTasks: 3,
       optionalTasks: 2,
+      completedRequired: 1,
+      completedOptional: 2,
       progress: 30
     };
 
@@ -202,6 +212,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 15,
       completedTasks: 8,
       optionalTasks: 3,
+      completedRequired: 5,
+      completedOptional: 3,
       progress: 53
     };
 
@@ -228,6 +240,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 5,
       completedTasks: 2,
       optionalTasks: 1,
+      completedRequired: 1,
+      completedOptional: 1,
       progress: 40
     };
 
@@ -252,6 +266,8 @@ describe('ProfileManager - Template Instantiation', () => {
       totalTasks: 20,
       completedTasks: 5,
       optionalTasks: 3,
+      completedRequired: 2,
+      completedOptional: 3,
       progress: 25
     };
 

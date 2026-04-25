@@ -36,6 +36,23 @@ class MockStateManager {
   }
 }
 
+/**
+ * Helper to get a date relative to the current week.
+ * weekOffset: 0 = current week, -1 = last week, -2 = two weeks ago, etc.
+ * dayOfWeek: 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+ */
+function getRelativeDate(weekOffset: number, dayOfWeek: number = 0, hour: number = 10): Date {
+  const now = new Date();
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  monday.setHours(hour, 0, 0, 0);
+  const target = new Date(monday);
+  target.setDate(monday.getDate() + (weekOffset * 7) + dayOfWeek);
+  return target;
+}
+
 describe('VelocityCalculator - Task Completion Recording', () => {
   let calculator: VelocityCalculator;
   let mockStateManager: MockStateManager;
@@ -47,7 +64,7 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should record required task completion correctly', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z'); // Monday
+    const timestamp = getRelativeDate(0, 0); // Current week Monday
     
     await calculator.recordTaskCompletion('test-spec', 'task-1', true, timestamp);
     
@@ -60,7 +77,7 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should record optional task completion correctly', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     await calculator.recordTaskCompletion('test-spec', 'task-1', false, timestamp);
     
@@ -73,9 +90,9 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should aggregate multiple task completions in same week', async () => {
-    const monday = new Date('2026-02-02T10:00:00Z');
-    const wednesday = new Date('2026-02-04T10:00:00Z');
-    const friday = new Date('2026-02-06T10:00:00Z');
+    const monday = getRelativeDate(0, 0);
+    const wednesday = getRelativeDate(0, 2);
+    const friday = getRelativeDate(0, 4);
     
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, monday);
     await calculator.recordTaskCompletion('spec-1', 'task-2', true, wednesday);
@@ -90,9 +107,9 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should track tasks across different weeks', async () => {
-    const week1 = new Date('2026-01-26T10:00:00Z'); // Week 1
-    const week2 = new Date('2026-02-02T10:00:00Z'); // Week 2
-    const week3 = new Date('2026-02-09T10:00:00Z'); // Week 3
+    const week1 = getRelativeDate(-2, 0);
+    const week2 = getRelativeDate(-1, 0);
+    const week3 = getRelativeDate(0, 0);
     
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, week1);
     await calculator.recordTaskCompletion('spec-1', 'task-2', true, week1);
@@ -110,11 +127,11 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should track day of week correctly', async () => {
-    const monday = new Date('2026-02-02T10:00:00Z');
-    const tuesday = new Date('2026-02-03T10:00:00Z');
-    const wednesday = new Date('2026-02-04T10:00:00Z');
-    const thursday = new Date('2026-02-05T10:00:00Z');
-    const friday = new Date('2026-02-06T10:00:00Z');
+    const monday = getRelativeDate(0, 0);
+    const tuesday = getRelativeDate(0, 1);
+    const wednesday = getRelativeDate(0, 2);
+    const thursday = getRelativeDate(0, 3);
+    const friday = getRelativeDate(0, 4);
     
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, monday);
     await calculator.recordTaskCompletion('spec-1', 'task-2', true, monday);
@@ -137,7 +154,7 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should track spec activity on first task', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     await calculator.recordTaskCompletion('new-spec', 'task-1', true, timestamp);
     
@@ -152,9 +169,9 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should update spec activity on subsequent tasks', async () => {
-    const firstTask = new Date('2026-02-03T10:00:00Z');
-    const secondTask = new Date('2026-02-05T14:00:00Z');
-    const thirdTask = new Date('2026-02-07T16:00:00Z');
+    const firstTask = getRelativeDate(0, 0);
+    const secondTask = getRelativeDate(0, 2);
+    const thirdTask = getRelativeDate(0, 4);
     
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, firstTask);
     await calculator.recordTaskCompletion('spec-1', 'task-2', true, secondTask);
@@ -168,7 +185,7 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should handle multiple specs independently', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     await calculator.recordTaskCompletion('spec-a', 'task-1', true, timestamp);
     await calculator.recordTaskCompletion('spec-a', 'task-2', true, timestamp);
@@ -189,7 +206,7 @@ describe('VelocityCalculator - Task Completion Recording', () => {
   });
 
   test('should persist data after each task completion', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
     
@@ -210,7 +227,7 @@ describe('VelocityCalculator - Spec Completion Tracking', () => {
   });
 
   test('should record spec completion correctly', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     await calculator.recordSpecCompletion('spec-1', 10, 10, timestamp);
     
@@ -226,9 +243,9 @@ describe('VelocityCalculator - Spec Completion Tracking', () => {
   });
 
   test('should track multiple spec completions in same week', async () => {
-    const monday = new Date('2026-02-02T10:00:00Z');
-    const wednesday = new Date('2026-02-04T10:00:00Z');
-    const friday = new Date('2026-02-06T10:00:00Z');
+    const monday = getRelativeDate(0, 0);
+    const wednesday = getRelativeDate(0, 2);
+    const friday = getRelativeDate(0, 4);
     
     await calculator.recordSpecCompletion('spec-1', 5, 5, monday);
     await calculator.recordSpecCompletion('spec-2', 8, 8, wednesday);
@@ -257,7 +274,7 @@ describe('VelocityCalculator - Spec Completion Tracking', () => {
   });
 
   test('should handle spec uncompleted (task unchecked)', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     // Complete the spec
     await calculator.recordSpecCompletion('spec-1', 10, 10, timestamp);
@@ -285,7 +302,7 @@ describe('VelocityCalculator - Data Persistence', () => {
   });
 
   test('should persist and restore velocity data', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     // Record some data
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, timestamp);

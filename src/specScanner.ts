@@ -255,12 +255,16 @@ export class SpecScanner {
       let aggregatedTotal = taskStats.totalTasks;
       let aggregatedCompleted = taskStats.completedTasks;
       let aggregatedOptional = taskStats.optionalTasks;
+      let aggregatedCompletedRequired = taskStats.completedRequired;
+      let aggregatedCompletedOptional = taskStats.completedOptional;
 
       for (const meta of extraFilesMetadata) {
         if (meta.isTaskLike) {
           aggregatedTotal += meta.totalTasks!;
           aggregatedCompleted += meta.completedTasks!;
           aggregatedOptional += meta.optionalTasks!;
+          aggregatedCompletedRequired += meta.completedRequired ?? 0;
+          aggregatedCompletedOptional += meta.completedOptional ?? 0;
         }
       }
 
@@ -283,6 +287,8 @@ export class SpecScanner {
         totalTasks: aggregatedTotal,
         completedTasks: aggregatedCompleted,
         optionalTasks: aggregatedOptional,
+        completedRequired: aggregatedCompletedRequired,
+        completedOptional: aggregatedCompletedOptional,
         progress: aggregatedProgress
       };
     } catch (error) {
@@ -324,6 +330,8 @@ export class SpecScanner {
           totalTasks: stats.totalTasks,
           completedTasks: stats.completedTasks,
           optionalTasks: stats.optionalTasks,
+          completedRequired: stats.completedRequired,
+          completedOptional: stats.completedOptional,
         });
       } else {
         metadata.push({ fileName, isTaskLike: false });
@@ -367,16 +375,20 @@ export class SpecScanner {
     totalTasks: number;
     completedTasks: number;
     optionalTasks: number;
+    completedRequired: number;
+    completedOptional: number;
     progress: number;
   } {
     if (!content || content.trim().length === 0) {
-      return { totalTasks: 0, completedTasks: 0, optionalTasks: 0, progress: 0 };
+      return { totalTasks: 0, completedTasks: 0, optionalTasks: 0, completedRequired: 0, completedOptional: 0, progress: 0 };
     }
 
     const lines = content.split('\n');
     let totalTasks = 0;
     let completedTasks = 0;
     let optionalTasks = 0;
+    let completedRequired = 0;
+    let completedOptional = 0;
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -393,6 +405,11 @@ export class SpecScanner {
         
         if (state === 'x') {
           completedTasks++;
+          if (isOptional) {
+            completedOptional++;
+          } else {
+            completedRequired++;
+          }
         }
         
         if (isOptional) {
@@ -405,7 +422,7 @@ export class SpecScanner {
       ? Math.round((completedTasks / totalTasks) * 100)
       : 0;
 
-    return { totalTasks, completedTasks, optionalTasks, progress };
+    return { totalTasks, completedTasks, optionalTasks, completedRequired, completedOptional, progress };
   }
 
   /**

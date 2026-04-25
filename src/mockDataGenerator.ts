@@ -246,10 +246,10 @@ export async function generateMockVelocityData(stateManager: StateManager): Prom
         `Mock velocity data generated! ${mockData.weeklyTasks.length} weeks, ${totalSpecsCompleted} specs completed, ${mockData.dailyTaskCounts.length} days with activity, ${mockData.taskCompletionEvents.length} events. Refresh Analytics to see it.`
     );
     
-    console.log('Mock velocity data generated:');
-    console.log('- Weeks:', mockData.weeklyTasks.length);
-    console.log('- Specs completed:', totalSpecsCompleted);
-    console.log('- Daily counts:', mockData.dailyTaskCounts.length);
-    console.log('- Events:', mockData.taskCompletionEvents.length);
-    console.log('- Specs tracked:', Object.keys(mockData.specActivity).length);
+    //console.log('Mock velocity data generated:');
+    //console.log('- Weeks:', mockData.weeklyTasks.length);
+    //console.log('- Specs completed:', totalSpecsCompleted);
+    //console.log('- Daily counts:', mockData.dailyTaskCounts.length);
+    //console.log('- Events:', mockData.taskCompletionEvents.length);
+    //console.log('- Specs tracked:', Object.keys(mockData.specActivity).length);
 }

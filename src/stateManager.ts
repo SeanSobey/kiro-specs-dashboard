@@ -114,7 +114,7 @@ export class StateManager {
     try {
       const key = `dashboardState_${workspaceFolderName}`;
       await this.workspaceState.update(key, undefined);
-      console.log(`Cleared state for workspace folder: ${workspaceFolderName}`);
+      //console.log(`Cleared state for workspace folder: ${workspaceFolderName}`);
     } catch (error) {
       console.error(`Error clearing state for workspace folder ${workspaceFolderName}:`, error);
     }
@@ -300,7 +300,7 @@ export class StateManager {
     try {
       const key = `velocityData_${workspaceFolderName}`;
       await this.workspaceState.update(key, undefined);
-      console.log(`Cleared velocity data for workspace folder: ${workspaceFolderName}`);
+      //console.log(`Cleared velocity data for workspace folder: ${workspaceFolderName}`);
     } catch (error) {
       console.error(`Error clearing velocity data for workspace folder ${workspaceFolderName}:`, error);
     }
@@ -315,7 +315,7 @@ export class StateManager {
   async clearVelocityData(): Promise<void> {
     try {
       await this.workspaceState.update('velocityData', undefined);
-      console.log('Cleared all velocity data');
+      //console.log('Cleared all velocity data');
     } catch (error) {
       console.error('Error clearing velocity data:', error);
       throw error;

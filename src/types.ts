@@ -12,6 +12,8 @@ export interface ExtraFileMetadata {
   totalTasks?: number;        // only present if isTaskLike
   completedTasks?: number;    // only present if isTaskLike
   optionalTasks?: number;     // only present if isTaskLike
+  completedRequired?: number; // only present if isTaskLike — completed non-optional tasks
+  completedOptional?: number; // only present if isTaskLike — completed optional tasks
 }
 
 /**
@@ -33,6 +35,8 @@ export interface SpecFile {
   totalTasks: number;       // Total task count
   completedTasks: number;   // Completed task count
   optionalTasks: number;    // Optional task count (marked with *)
+  completedRequired: number; // Completed non-optional tasks
+  completedOptional: number; // Completed optional tasks
   progress: number;         // Percentage (0-100)
 
   // Extra files
@@ -40,7 +44,7 @@ export interface SpecFile {
   extraFilesMetadata?: ExtraFileMetadata[];  // Rich metadata for extra files (includes task stats)
 
   // Per-file task stats for tasks.md (before aggregation with extra files)
-  tasksFileStats?: { totalTasks: number; completedTasks: number; optionalTasks: number; progress: number };
+  tasksFileStats?: { totalTasks: number; completedTasks: number; optionalTasks: number; completedRequired: number; completedOptional: number; progress: number };
 
   // Metadata
   lastModified?: Date;      // Last modification timestamp

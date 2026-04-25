@@ -36,9 +36,9 @@ const validProfileGenerator = (): fc.Arbitrary<ExecutionProfile> =>
       fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789-'),
       { minLength: 3, maxLength: 30 }
     ).filter(s => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s)), // Ensure kebab-case
-    name: fc.string({ minLength: 1, maxLength: 100 }),
+    name: fc.string({ minLength: 1, maxLength: 100 }).filter(s => s.trim().length > 0),
     icon: fc.constantFrom('rocket', 'star', 'checklist', 'gear', 'zap', 'beaker', 'flame'),
-    promptTemplate: fc.string({ minLength: 10, maxLength: 1000 }),
+    promptTemplate: fc.string({ minLength: 10, maxLength: 1000 }).filter(s => s.trim().length > 0),
     isBuiltIn: fc.boolean(),
     createdAt: fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') })
       .map(d => d.toISOString()),

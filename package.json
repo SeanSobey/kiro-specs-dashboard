@@ -2,20 +2,20 @@
   "name": "kiro-specs-dashboard",
   "displayName": "Kiro Specs Dashboard",
   "description": "Extension for visualizing and tracking Kiro spec features and tasks.",
-  "version": "0.2.0",
-  "publisher": "grg-lab",
+  "version": "0.4.2",
+  "publisher": "SeanSobey",
   "author": {
-    "name": "grg-lab"
+    "name": "SeanSobey"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/grg-lab/kiro-specs-dashboard"
+    "url": "https://github.com/SeanSobey/kiro-specs-dashboard"
   },
   "bugs": {
-    "url": "https://github.com/grg-lab/kiro-specs-dashboard/issues"
+    "url": "https://github.com/SeanSobey/kiro-specs-dashboard/issues"
   },
-  "homepage": "https://github.com/grg-lab/kiro-specs-dashboard#readme",
+  "homepage": "https://github.com/SeanSobey/kiro-specs-dashboard#readme",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.75.0"
@@ -136,19 +136,45 @@
           },
           "default": [".kiro/specs"],
           "description": "Directories to scan for spec files, relative to each workspace folder root. Supports multiple directories."
+        },
+        "kiroSpecsDashboard.extraFileLabels": {
+          "type": "object",
+          "default": {},
+          "description": "Custom display labels for extra markdown files. Keys are file names without .md extension, values are display labels.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "kiroSpecsDashboard.extraFileVisibility": {
+          "type": "object",
+          "default": {},
+          "description": "Control visibility of extra markdown files. Keys are file names without .md extension, values are booleans.",
+          "additionalProperties": {
+            "type": "boolean"
+          }
         }
       }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "specs-dashboard.refresh",
+          "when": "view == specs-dashboard.view",
+          "group": "navigation"
+        }
+      ]
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "npx tsc -p ./",
+    "watch": "npx tsc -watch -p ./",
+	"package": "npx vsce package",
     "pretest": "npm run compile",
     "test": "node ./out/test/runTest.js",
-    "test:unit": "jest",
-    "test:property": "jest --testPathPattern=property",
-    "lint": "eslint src --ext ts"
+    "test:unit": "npx jest",
+    "test:property": "npx jest --testPathPattern=property",
+    "lint": "npx eslint src --ext ts"
   },
   "devDependencies": {
     "@types/node": "^18.x",

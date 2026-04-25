@@ -83,14 +83,14 @@ export class VelocityCalculator {
     const weekStart = this.getWeekStart(timestamp);
     
     // Debug: Log the week calculation
-    console.log(`[VelocityCalculator] Recording task for ${specName}:`, {
-      timestamp: timestamp.toISOString(),
-      weekStart: weekStart.toISOString(),
-      existingWeeks: this.velocityData.weeklyTasks.map(w => ({
-        start: w.weekStart.toISOString(),
-        completed: w.completed
-      }))
-    });
+    // console.log(`[VelocityCalculator] Recording task for ${specName}:`, {
+    //   timestamp: timestamp.toISOString(),
+    //   weekStart: weekStart.toISOString(),
+    //   existingWeeks: this.velocityData.weeklyTasks.map(w => ({
+    //     start: w.weekStart.toISOString(),
+    //     completed: w.completed
+    //   }))
+    // });
     
     const weekData = this.getOrCreateWeekData(weekStart);
     weekData.completed++;
@@ -713,13 +713,13 @@ export class VelocityCalculator {
    * Requirements: 21.1-21.10
    */
   calculateMetrics(specs?: Array<{ totalTasks: number; completedTasks: number }>): VelocityMetrics {
-    console.log(`[VelocityCalculator] Calculating metrics...`);
-    console.log(`[VelocityCalculator] Velocity data state:`, {
-      weeklyTasksCount: this.velocityData.weeklyTasks.length,
-      weeklySpecsCount: this.velocityData.weeklySpecs.length,
-      specActivityCount: Object.keys(this.velocityData.specActivity).length,
-      dayOfWeekTasks: this.velocityData.dayOfWeekTasks
-    });
+    // console.log(`[VelocityCalculator] Calculating metrics...`);
+    // console.log(`[VelocityCalculator] Velocity data state:`, {
+    //   weeklyTasksCount: this.velocityData.weeklyTasks.length,
+    //   weeklySpecsCount: this.velocityData.weeklySpecs.length,
+    //   specActivityCount: Object.keys(this.velocityData.specActivity).length,
+    //   dayOfWeekTasks: this.velocityData.dayOfWeekTasks
+    // });
     
     const metrics = {
       // Tasks metrics
@@ -757,16 +757,16 @@ export class VelocityCalculator {
       teamMetrics: this.calculateTeamMetrics()
     };
     
-    console.log(`[VelocityCalculator] Calculated metrics:`, {
-      currentWeekTasks: metrics.currentWeekTasks,
-      lastWeekTasks: metrics.lastWeekTasks,
-      averageVelocity: metrics.averageVelocity,
-      velocityTrend: metrics.velocityTrend,
-      remainingTasks: metrics.remainingTasks,
-      currentWeekSpecs: metrics.currentWeekSpecs,
-      averageSpecs: metrics.averageSpecs,
-      specsConsistencyScore: metrics.specsConsistencyScore
-    });
+    // console.log(`[VelocityCalculator] Calculated metrics:`, {
+    //   currentWeekTasks: metrics.currentWeekTasks,
+    //   lastWeekTasks: metrics.lastWeekTasks,
+    //   averageVelocity: metrics.averageVelocity,
+    //   velocityTrend: metrics.velocityTrend,
+    //   remainingTasks: metrics.remainingTasks,
+    //   currentWeekSpecs: metrics.currentWeekSpecs,
+    //   averageSpecs: metrics.averageSpecs,
+    //   specsConsistencyScore: metrics.specsConsistencyScore
+    // });
     
     return metrics;
   }

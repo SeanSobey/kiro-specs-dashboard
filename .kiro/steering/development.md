@@ -1,3 +1,8 @@
+---
+inclusion: manual
+description: Project setup, testing, debugging, common development tasks, and performance considerations.
+---
+
 # Development Guidelines
 
 ## Project Setup

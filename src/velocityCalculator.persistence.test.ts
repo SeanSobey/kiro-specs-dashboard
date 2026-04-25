@@ -46,13 +46,30 @@ class MockStateManager {
   }
 }
 
+/**
+ * Helper to get a date relative to the current week.
+ * weekOffset: 0 = current week, -1 = last week, -2 = two weeks ago, etc.
+ * dayOfWeek: 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+ */
+function getRelativeDate(weekOffset: number, dayOfWeek: number = 0, hour: number = 10): Date {
+  const now = new Date();
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  monday.setHours(hour, 0, 0, 0);
+  const target = new Date(monday);
+  target.setDate(monday.getDate() + (weekOffset * 7) + dayOfWeek);
+  return target;
+}
+
 describe('VelocityCalculator - State Persistence', () => {
   test('should persist velocity data after task completion', async () => {
     const mockStateManager = new MockStateManager();
     const calculator = new VelocityCalculator(mockStateManager as any);
     await calculator.initialize();
 
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
 
     const savedData = await mockStateManager.getVelocityData();
@@ -68,7 +85,7 @@ describe('VelocityCalculator - State Persistence', () => {
     const calculator1 = new VelocityCalculator(mockStateManager as any);
     await calculator1.initialize();
     
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     await calculator1.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
     await calculator1.recordTaskCompletion('spec-1', 'task-2', false, timestamp);
 
@@ -87,8 +104,8 @@ describe('VelocityCalculator - State Persistence', () => {
     const calculator = new VelocityCalculator(mockStateManager as any);
     await calculator.initialize();
 
-    const start = new Date('2026-02-01T10:00:00Z');
-    const end = new Date('2026-02-10T10:00:00Z');
+    const start = getRelativeDate(0, 0);
+    const end = getRelativeDate(0, 4);
 
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, start);
     await calculator.recordSpecCompletion('spec-1', 10, 10, end);
@@ -103,8 +120,8 @@ describe('VelocityCalculator - State Persistence', () => {
     const calculator = new VelocityCalculator(mockStateManager as any);
     await calculator.initialize();
 
-    const monday = new Date('2026-02-02T10:00:00Z');
-    const friday = new Date('2026-02-06T10:00:00Z');
+    const monday = getRelativeDate(0, 0);
+    const friday = getRelativeDate(0, 4);
 
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, monday);
     await calculator.recordTaskCompletion('spec-1', 'task-2', true, friday);
@@ -164,7 +181,7 @@ describe('VelocityCalculator - Workspace Isolation', () => {
     await calculator1.initialize();
     await calculator2.initialize();
 
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
 
     // Record different data in each workspace
     await calculator1.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
@@ -187,7 +204,7 @@ describe('VelocityCalculator - Workspace Isolation', () => {
     const calculator1 = new VelocityCalculator(workspace1Manager as any);
     await calculator1.initialize();
 
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     await calculator1.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
 
     // Create calculator for different workspace
@@ -295,7 +312,7 @@ describe('VelocityCalculator - Corrupted Data Recovery', () => {
     await calculator.initialize();
 
     // Should be able to record new data
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     await expect(
       calculator.recordTaskCompletion('spec-1', 'task-1', true, timestamp)
     ).resolves.not.toThrow();
@@ -311,7 +328,7 @@ describe('VelocityCalculator - Date Serialization', () => {
     const calculator1 = new VelocityCalculator(mockStateManager as any);
     await calculator1.initialize();
 
-    const originalDate = new Date('2026-02-03T10:00:00Z');
+    const originalDate = getRelativeDate(0, 0);
     await calculator1.recordTaskCompletion('spec-1', 'task-1', true, originalDate);
 
     // Create new calculator to test deserialization
@@ -327,8 +344,8 @@ describe('VelocityCalculator - Date Serialization', () => {
     const calculator1 = new VelocityCalculator(mockStateManager as any);
     await calculator1.initialize();
 
-    const start = new Date('2026-02-01T10:00:00Z');
-    const end = new Date('2026-02-10T10:00:00Z');
+    const start = getRelativeDate(-1, 0);
+    const end = getRelativeDate(0, 0);
 
     await calculator1.recordTaskCompletion('spec-1', 'task-1', true, start);
     await calculator1.recordSpecCompletion('spec-1', 10, 10, end);
@@ -349,17 +366,17 @@ describe('VelocityCalculator - Long-term Persistence', () => {
     // Session 1: Record some data
     const calc1 = new VelocityCalculator(mockStateManager as any);
     await calc1.initialize();
-    await calc1.recordTaskCompletion('spec-1', 'task-1', true, new Date('2026-01-20T10:00:00Z'));
+    await calc1.recordTaskCompletion('spec-1', 'task-1', true, getRelativeDate(-2, 0));
 
     // Session 2: Record more data
     const calc2 = new VelocityCalculator(mockStateManager as any);
     await calc2.initialize();
-    await calc2.recordTaskCompletion('spec-1', 'task-2', true, new Date('2026-01-27T10:00:00Z'));
+    await calc2.recordTaskCompletion('spec-1', 'task-2', true, getRelativeDate(-1, 0));
 
     // Session 3: Record even more data
     const calc3 = new VelocityCalculator(mockStateManager as any);
     await calc3.initialize();
-    await calc3.recordTaskCompletion('spec-1', 'task-3', true, new Date('2026-02-03T10:00:00Z'));
+    await calc3.recordTaskCompletion('spec-1', 'task-3', true, getRelativeDate(0, 0));
 
     // Session 4: Verify all data is present
     const calc4 = new VelocityCalculator(mockStateManager as any);
@@ -377,8 +394,7 @@ describe('VelocityCalculator - Long-term Persistence', () => {
 
     // Record data for 20 weeks
     for (let week = 0; week < 20; week++) {
-      const weekDate = new Date('2025-09-01T10:00:00Z');
-      weekDate.setDate(weekDate.getDate() + (week * 7));
+      const weekDate = getRelativeDate(-19 + week, 0);
 
       for (let i = 0; i < 5; i++) {
         await calculator.recordTaskCompletion('spec-1', `w${week}-${i}`, true, weekDate);

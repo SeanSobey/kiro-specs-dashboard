@@ -30,6 +30,14 @@ export interface Disposable {
 
 export const window = {
   createWebviewPanel: jest.fn(),
+  createOutputChannel: jest.fn().mockReturnValue({
+    appendLine: jest.fn(),
+    append: jest.fn(),
+    clear: jest.fn(),
+    show: jest.fn(),
+    hide: jest.fn(),
+    dispose: jest.fn(),
+  }),
   showErrorMessage: jest.fn().mockResolvedValue(undefined),
   showInformationMessage: jest.fn().mockResolvedValue(undefined),
   showWarningMessage: jest.fn().mockResolvedValue(undefined),

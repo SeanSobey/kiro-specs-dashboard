@@ -41,6 +41,23 @@ class MockStateManager {
   }
 }
 
+/**
+ * Helper to get a date relative to the current week.
+ * weekOffset: 0 = current week, -1 = last week, -2 = two weeks ago, etc.
+ * dayOfWeek: 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+ */
+function getRelativeDate(weekOffset: number, dayOfWeek: number = 0, hour: number = 10): Date {
+  const now = new Date();
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  monday.setHours(hour, 0, 0, 0);
+  const target = new Date(monday);
+  target.setDate(monday.getDate() + (weekOffset * 7) + dayOfWeek);
+  return target;
+}
+
 describe('VelocityCalculator - Tasks Per Week (Metric 1)', () => {
   let calculator: VelocityCalculator;
   let mockStateManager: MockStateManager;
@@ -63,9 +80,9 @@ describe('VelocityCalculator - Tasks Per Week (Metric 1)', () => {
 
   test('should return correct task counts for recent weeks', async () => {
     // Add tasks for 3 different weeks
-    const week1 = new Date('2026-01-26T10:00:00Z');
-    const week2 = new Date('2026-02-02T10:00:00Z');
-    const week3 = new Date('2026-02-09T10:00:00Z');
+    const week1 = getRelativeDate(-2, 0);
+    const week2 = getRelativeDate(-1, 0);
+    const week3 = getRelativeDate(0, 0);
     
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, week1);
     await calculator.recordTaskCompletion('spec-1', 'task-2', true, week1);
@@ -100,7 +117,7 @@ describe('VelocityCalculator - Velocity Trend (Metric 2)', () => {
   });
 
   test('should return 100% when current week has tasks but last week has none', async () => {
-    const thisWeek = new Date('2026-02-03T10:00:00Z');
+    const thisWeek = getRelativeDate(0, 0);
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, thisWeek);
     
     const trend = calculator.calculateTrend();
@@ -108,8 +125,8 @@ describe('VelocityCalculator - Velocity Trend (Metric 2)', () => {
   });
 
   test('should calculate positive trend correctly', async () => {
-    const lastWeek = new Date('2026-01-27T10:00:00Z');
-    const thisWeek = new Date('2026-02-03T10:00:00Z');
+    const lastWeek = getRelativeDate(-1, 0);
+    const thisWeek = getRelativeDate(0, 0);
     
     // Last week: 4 tasks
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, lastWeek);
@@ -130,8 +147,8 @@ describe('VelocityCalculator - Velocity Trend (Metric 2)', () => {
   });
 
   test('should calculate negative trend correctly', async () => {
-    const lastWeek = new Date('2026-01-27T10:00:00Z');
-    const thisWeek = new Date('2026-02-03T10:00:00Z');
+    const lastWeek = getRelativeDate(-1, 0);
+    const thisWeek = getRelativeDate(0, 0);
     
     // Last week: 10 tasks
     for (let i = 0; i < 10; i++) {
@@ -164,10 +181,10 @@ describe('VelocityCalculator - Rolling Average (Metric 3)', () => {
   });
 
   test('should calculate 4-week rolling average correctly', async () => {
-    const week1 = new Date('2026-01-12T10:00:00Z');
-    const week2 = new Date('2026-01-19T10:00:00Z');
-    const week3 = new Date('2026-01-26T10:00:00Z');
-    const week4 = new Date('2026-02-02T10:00:00Z');
+    const week1 = getRelativeDate(-3, 0);
+    const week2 = getRelativeDate(-2, 0);
+    const week3 = getRelativeDate(-1, 0);
+    const week4 = getRelativeDate(0, 0);
     
     // Week 1: 5 tasks
     for (let i = 0; i < 5; i++) {
@@ -194,7 +211,7 @@ describe('VelocityCalculator - Rolling Average (Metric 3)', () => {
   });
 
   test('should handle fewer weeks than requested', async () => {
-    const week1 = new Date('2026-02-02T10:00:00Z');
+    const week1 = getRelativeDate(0, 0);
     
     for (let i = 0; i < 10; i++) {
       await calculator.recordTaskCompletion('spec-1', `task-${i}`, true, week1);
@@ -221,8 +238,8 @@ describe('VelocityCalculator - Specs Per Week (Metric 4)', () => {
   });
 
   test('should track spec completions per week', async () => {
-    const week1 = new Date('2026-01-26T10:00:00Z');
-    const week2 = new Date('2026-02-02T10:00:00Z');
+    const week1 = getRelativeDate(-1, 0);
+    const week2 = getRelativeDate(0, 0);
     
     await calculator.recordSpecCompletion('spec-1', 10, 10, week1);
     await calculator.recordSpecCompletion('spec-2', 5, 5, week1);
@@ -353,10 +370,10 @@ describe('VelocityCalculator - Projected Completion (Metric 7)', () => {
 
   test('should calculate projected date correctly', async () => {
     // Build velocity: 10 tasks per week for 4 weeks
-    const week1 = new Date('2026-01-05T10:00:00Z');
-    const week2 = new Date('2026-01-12T10:00:00Z');
-    const week3 = new Date('2026-01-19T10:00:00Z');
-    const week4 = new Date('2026-01-26T10:00:00Z');
+    const week1 = getRelativeDate(-3, 0);
+    const week2 = getRelativeDate(-2, 0);
+    const week3 = getRelativeDate(-1, 0);
+    const week4 = getRelativeDate(0, 0);
     
     for (let i = 0; i < 10; i++) {
       await calculator.recordTaskCompletion('spec-1', `w1-${i}`, true, week1);
@@ -393,13 +410,13 @@ describe('VelocityCalculator - Day of Week Velocity (Metric 8)', () => {
   });
 
   test('should track all days correctly', async () => {
-    const monday = new Date('2026-02-02T10:00:00Z');
-    const tuesday = new Date('2026-02-03T10:00:00Z');
-    const wednesday = new Date('2026-02-04T10:00:00Z');
-    const thursday = new Date('2026-02-05T10:00:00Z');
-    const friday = new Date('2026-02-06T10:00:00Z');
-    const saturday = new Date('2026-02-07T10:00:00Z');
-    const sunday = new Date('2026-02-08T10:00:00Z');
+    const monday = getRelativeDate(0, 0);
+    const tuesday = getRelativeDate(0, 1);
+    const wednesday = getRelativeDate(0, 2);
+    const thursday = getRelativeDate(0, 3);
+    const friday = getRelativeDate(0, 4);
+    const saturday = getRelativeDate(0, 5);
+    const sunday = getRelativeDate(0, 6);
     
     await calculator.recordTaskCompletion('spec-1', 'mon', true, monday);
     await calculator.recordTaskCompletion('spec-1', 'tue', true, tuesday);
@@ -438,7 +455,7 @@ describe('VelocityCalculator - Required vs Optional (Metric 9)', () => {
   });
 
   test('should calculate split correctly', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     
     // 7 required tasks
     for (let i = 0; i < 7; i++) {
@@ -474,8 +491,7 @@ describe('VelocityCalculator - Consistency Score (Metric 10)', () => {
   test('should return high score for consistent velocity', async () => {
     // 10 tasks per week for 8 weeks (perfect consistency)
     for (let week = 0; week < 8; week++) {
-      const weekDate = new Date('2026-01-05T10:00:00Z');
-      weekDate.setDate(weekDate.getDate() + (week * 7));
+      const weekDate = getRelativeDate(-7 + week, 0);
       
       for (let i = 0; i < 10; i++) {
         await calculator.recordTaskCompletion('spec-1', `w${week}-${i}`, true, weekDate);
@@ -491,8 +507,7 @@ describe('VelocityCalculator - Consistency Score (Metric 10)', () => {
     const taskCounts = [1, 20, 2, 18, 3, 17, 4, 16];
     
     for (let week = 0; week < 8; week++) {
-      const weekDate = new Date('2026-01-05T10:00:00Z');
-      weekDate.setDate(weekDate.getDate() + (week * 7));
+      const weekDate = getRelativeDate(-7 + week, 0);
       
       for (let i = 0; i < taskCounts[week]; i++) {
         await calculator.recordTaskCompletion('spec-1', `w${week}-${i}`, true, weekDate);
@@ -506,8 +521,7 @@ describe('VelocityCalculator - Consistency Score (Metric 10)', () => {
   test('should return correct rating for high score', async () => {
     // Build consistent velocity
     for (let week = 0; week < 8; week++) {
-      const weekDate = new Date('2026-01-05T10:00:00Z');
-      weekDate.setDate(weekDate.getDate() + (week * 7));
+      const weekDate = getRelativeDate(-7 + week, 0);
       
       for (let i = 0; i < 10; i++) {
         await calculator.recordTaskCompletion('spec-1', `w${week}-${i}`, true, weekDate);
@@ -523,8 +537,7 @@ describe('VelocityCalculator - Consistency Score (Metric 10)', () => {
     const taskCounts = [8, 10, 9, 11, 8, 10, 9, 11];
     
     for (let week = 0; week < 8; week++) {
-      const weekDate = new Date('2026-01-05T10:00:00Z');
-      weekDate.setDate(weekDate.getDate() + (week * 7));
+      const weekDate = getRelativeDate(-7 + week, 0);
       
       for (let i = 0; i < taskCounts[week]; i++) {
         await calculator.recordTaskCompletion('spec-1', `w${week}-${i}`, true, weekDate);
@@ -547,7 +560,7 @@ describe('VelocityCalculator - Edge Cases', () => {
   });
 
   test('should handle single data point', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
     
     const metrics = calculator.calculateMetrics();
@@ -558,7 +571,7 @@ describe('VelocityCalculator - Edge Cases', () => {
   });
 
   test('should handle zero division in trend calculation', async () => {
-    const thisWeek = new Date('2026-02-03T10:00:00Z');
+    const thisWeek = getRelativeDate(0, 0);
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, thisWeek);
     
     const trend = calculator.calculateTrend();
@@ -577,7 +590,7 @@ describe('VelocityCalculator - Edge Cases', () => {
   });
 
   test('should handle all completed specs for projections', async () => {
-    const timestamp = new Date('2026-02-03T10:00:00Z');
+    const timestamp = getRelativeDate(0, 0);
     await calculator.recordTaskCompletion('spec-1', 'task-1', true, timestamp);
     
     const specs = [

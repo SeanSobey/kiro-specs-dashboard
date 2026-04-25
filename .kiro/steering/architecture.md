@@ -1,3 +1,8 @@
+---
+inclusion: manual
+description: Extension architecture overview — core components, communication flow, design patterns, and security model.
+---
+
 # Architecture
 
 ## Extension Architecture

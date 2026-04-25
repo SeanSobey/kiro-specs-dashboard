@@ -194,27 +194,27 @@ function generateMockData() {
     // Save to workspace state
     workspaceState.update('velocityData', mockData).then(() => {
         vscode.window.showInformationMessage('Mock velocity data generated! Refresh the Analytics panel to see the data.');
-        console.log('Mock data generated successfully!');
-        console.log('Total weeks:', mockData.weeklyTasks.length);
-        console.log('Total daily counts:', mockData.dailyTaskCounts.length);
-        console.log('Total events:', mockData.taskCompletionEvents.length);
-        console.log('Total specs:', Object.keys(mockData.specActivity).length);
+        //console.log('Mock data generated successfully!');
+        //console.log('Total weeks:', mockData.weeklyTasks.length);
+        //console.log('Total daily counts:', mockData.dailyTaskCounts.length);
+        //console.log('Total events:', mockData.taskCompletionEvents.length);
+        //console.log('Total specs:', Object.keys(mockData.specActivity).length);
     });
 }
 
 // For standalone execution (won't work, needs Extension Host context)
 if (typeof module !== 'undefined' && module.exports) {
-    console.log('This script needs to be run in the VSCode Extension Host context.');
-    console.log('');
-    console.log('Instructions:');
-    console.log('1. Open VSCode with your workspace');
-    console.log('2. Open Command Palette (Cmd+Shift+P / Ctrl+Shift+P)');
-    console.log('3. Type: Developer: Execute JavaScript in Extension Host');
-    console.log('4. Copy and paste the generateMockData function from this file');
-    console.log('5. Call generateMockData() at the end');
-    console.log('');
-    console.log('Or use the simpler approach below:');
-    console.log('');
+    //console.log('This script needs to be run in the VSCode Extension Host context.');
+    //console.log('');
+    //console.log('Instructions:');
+    //console.log('1. Open VSCode with your workspace');
+    //console.log('2. Open Command Palette (Cmd+Shift+P / Ctrl+Shift+P)');
+    //console.log('3. Type: Developer: Execute JavaScript in Extension Host');
+    //console.log('4. Copy and paste the generateMockData function from this file');
+    //console.log('5. Call generateMockData() at the end');
+    //console.log('');
+    //console.log('Or use the simpler approach below:');
+    //console.log('');
 }
 
 // Export for use

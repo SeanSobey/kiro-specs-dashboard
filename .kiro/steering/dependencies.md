@@ -1,3 +1,8 @@
+---
+inclusion: manual
+description: Production and dev dependencies, version requirements, webview CDN libraries, and update procedures.
+---
+
 # Dependencies
 
 ## Production Dependencies

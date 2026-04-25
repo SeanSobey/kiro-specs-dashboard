@@ -13,7 +13,7 @@ import { HistoryPanelManager } from './historyPanelManager';
  * Called when the extension is activated based on activation events
  */
 export function activate(context: vscode.ExtensionContext): void {
-  console.log('Kiro Specs Dashboard extension is now active');
+  //console.log('Kiro Specs Dashboard extension is now active');
 
   // Create output channel for execution managers
   const executionOutputChannel = vscode.window.createOutputChannel('Specs Execution');
@@ -345,7 +345,7 @@ export function activate(context: vscode.ExtensionContext): void {
   specWatchers = createSpecWatchers(specDirectories);
   attachWatcherListeners(specWatchers);
 
-  // Listen for configuration changes to specDirectories
+  // Listen for configuration changes to specDirectories, extraFileLabels, and extraFileVisibility
   const configChangeListener = vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration('kiroSpecsDashboard.specDirectories')) {
       // Dispose old watchers
@@ -358,6 +358,12 @@ export function activate(context: vscode.ExtensionContext): void {
       specWatchers = createSpecWatchers(specDirectories);
       attachWatcherListeners(specWatchers);
       // Trigger a refresh with the new directories
+      provider.refresh();
+    }
+
+    // Refresh dashboard when extra file label or visibility settings change (Requirement 2.5)
+    if (e.affectsConfiguration('kiroSpecsDashboard.extraFileLabels') ||
+        e.affectsConfiguration('kiroSpecsDashboard.extraFileVisibility')) {
       provider.refresh();
     }
   });
@@ -387,14 +393,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Handle workspace folder changes for multi-root workspace support
   // Requirements: 12.2, 12.3 (clean up watchers and state when workspaces are removed)
   const workspaceFoldersChangeListener = vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
-    console.log('Workspace folders changed:', {
-      added: event.added.length,
-      removed: event.removed.length
-    });
+    // console.log('Workspace folders changed:', {
+    //   added: event.added.length,
+    //   removed: event.removed.length
+    // });
 
     // Clean up state for removed workspace folders
     for (const folder of event.removed) {
-      console.log(`Cleaning up state for removed workspace folder: ${folder.name}`);
+      //console.log(`Cleaning up state for removed workspace folder: ${folder.name}`);
       await provider.cleanupWorkspaceFolder(folder.name);
     }
 
@@ -448,6 +454,6 @@ export function activate(context: vscode.ExtensionContext): void {
  */
 export function deactivate(): void {
   // Cleanup is handled automatically by disposing subscriptions
-  console.log('Kiro Specs Dashboard extension is now deactivated');
-  console.log('All resources have been disposed via context.subscriptions');
+  //console.log('Kiro Specs Dashboard extension is now deactivated');
+  //console.log('All resources have been disposed via context.subscriptions');
 }

@@ -1,3 +1,8 @@
+---
+inclusion: manual
+description: Naming conventions, spec file structure, task formats, git workflow, and code documentation standards.
+---
+
 # Conventions
 
 ## Spec File Structure

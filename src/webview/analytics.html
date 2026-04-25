@@ -1479,7 +1479,7 @@
          * Requirements: 22.9
          */
         function handleRefresh() {
-            console.log('Refresh button clicked');
+            //console.log('Refresh button clicked');
             
             // Send refresh command to extension
             vscode.postMessage({
@@ -1502,17 +1502,17 @@
             
             switch (message.type) {
                 case 'metricsUpdated':
-                    console.log('Received metrics:', message.metrics);
+                    //console.log('Received metrics:', message.metrics);
                     updateMetrics(message.metrics);
                     break;
                     
                 case 'dataRefreshed':
-                    console.log('Data refreshed notification received');
+                    //console.log('Data refreshed notification received');
                     // Metrics will be updated via metricsUpdated message
                     break;
                     
                 case 'restoreTab':
-                    console.log('Restoring tab:', message.tab);
+                    //console.log('Restoring tab:', message.tab);
                     restoreActiveTab(message.tab);
                     break;
                     
@@ -1544,7 +1544,7 @@
          * Requirements: 23.1, 23.2
          */
         function restoreActiveTab(tabName) {
-            console.log('Restoring active tab:', tabName);
+            //console.log('Restoring active tab:', tabName);
             
             // Default to velocity if tab name is invalid
             if (!tabName || !document.getElementById(tabName + '-tab')) {

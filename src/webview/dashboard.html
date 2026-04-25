@@ -344,6 +344,23 @@
             z-index: 1;
             border-radius: 5px;
         }
+
+        .spec-progress-fill.optional {
+            background: color-mix(in srgb, var(--vscode-progressBar-background) 50%, transparent);
+            border-radius: 0 5px 5px 0;
+        }
+
+        .spec-progress-fill.required + .spec-progress-fill.optional {
+            border-radius: 0 5px 5px 0;
+        }
+
+        .spec-progress-fill.required {
+            border-radius: 5px 0 0 5px;
+        }
+
+        .spec-progress-fill.required:only-child {
+            border-radius: 5px;
+        }
         
         .spec-progress-bar::after {
             content: '';
@@ -360,6 +377,13 @@
                 rgba(128, 128, 128, 0.15) 6px
             );
             pointer-events: none;
+        }
+
+        .progress-breakdown {
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground);
+            font-family: var(--vscode-editor-font-family);
+            margin-bottom: 4px;
         }
 
         .spec-stats {
@@ -429,6 +453,7 @@
             margin-top: 2px;
             margin-bottom: 4px;
             position: relative;
+            display: flex;
         }
 
         .file-progress-fill {
@@ -436,6 +461,23 @@
             background: var(--vscode-progressBar-background);
             border-radius: 3px;
             transition: width 0.2s;
+        }
+
+        .file-progress-fill.optional {
+            background: color-mix(in srgb, var(--vscode-progressBar-background) 50%, transparent);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .file-progress-fill.required + .file-progress-fill.optional {
+            border-radius: 0 3px 3px 0;
+        }
+
+        .file-progress-fill.required {
+            border-radius: 3px 0 0 3px;
+        }
+
+        .file-progress-fill.required:only-child {
+            border-radius: 3px;
         }
 
         .extra-file-row {
@@ -2136,8 +2178,12 @@
                 console.error('Failed to report error to extension:', e);
             }
             
-            // Show fallback UI
-            showFallbackUI('An error occurred while rendering the dashboard. Please refresh.');
+            // Only show fallback UI if the main container is still intact
+            // Don't destroy the DOM for non-critical errors (e.g., library loading failures)
+            const statsContainer = document.getElementById('statsContainer');
+            if (!statsContainer) {
+                showFallbackUI('An error occurred while rendering the dashboard. Please refresh.');
+            }
             
             // Prevent default error handling
             event.preventDefault();
@@ -2159,9 +2205,6 @@
             } catch (e) {
                 console.error('Failed to report promise rejection to extension:', e);
             }
-            
-            // Show fallback UI
-            showFallbackUI('An error occurred while processing data. Please refresh.');
             
             // Prevent default handling
             event.preventDefault();
@@ -2219,8 +2262,11 @@
         let allSpecs = [];
         let filteredSpecs = [];
         let collapsedGroups = new Set(); // Track collapsed group names
+        let collapsedWorkspaceFolders = new Set(); // Track collapsed workspace folder names (session-scoped)
+        let folderPages = {}; // Track current page per workspace folder for per-folder pagination
         let executionProfiles = [];
         let executionStates = {};
+        let currentSettings = null; // Extra file labels and visibility settings
         
         // Request initial data
         vscode.postMessage({ type: 'requestSpecs' });
@@ -2236,6 +2282,7 @@
             switch (message.type) {
                 case 'specsLoaded':
                     allSpecs = message.specs;
+                    currentSettings = message.settings || null;
                     // Restore state from saved preferences
                     if (message.state) {
                         currentState = { ...currentState, ...message.state };
@@ -2256,6 +2303,16 @@
                         executionStates[message.specId] = message.state;
                         // Refresh the display to show updated status
                         displayPage(currentState.currentPage);
+                    }
+                    break;
+                case 'specUpdated':
+                    // Update a single spec's data and re-render to reflect new progress segments (Requirement 4.8)
+                    if (message.spec) {
+                        const idx = allSpecs.findIndex(s => s.name === message.spec.name);
+                        if (idx !== -1) {
+                            allSpecs[idx] = message.spec;
+                        }
+                        applyFilters();
                     }
                     break;
                 case 'executionHistoryUpdated':
@@ -2298,6 +2355,12 @@
             try {
                 const statsContainer = document.getElementById('statsContainer');
                 const specList = document.getElementById('specList');
+
+                // Guard against missing DOM elements (e.g., if fallback UI replaced the container)
+                if (!statsContainer || !specList) {
+                    console.error('displaySpecs: Required DOM elements not found');
+                    return;
+                }
 
                 // Don't set filteredSpecs here - let applyFilters() do it
                 currentState.currentPage = 1;
@@ -2350,10 +2413,14 @@
                     : 0;
 
                 // Update overall stats
-                document.getElementById('totalSpecs').textContent = overall.totalSpecs;
-                document.getElementById('completedTasks').textContent = overall.completedTasks;
-                document.getElementById('pendingTasks').textContent = overall.pendingTasks;
-                document.getElementById('overallPercentage').textContent = overall.percentage + '%';
+                const totalSpecsEl = document.getElementById('totalSpecs');
+                const completedTasksEl = document.getElementById('completedTasks');
+                const pendingTasksEl = document.getElementById('pendingTasks');
+                const overallPercentageEl = document.getElementById('overallPercentage');
+                if (totalSpecsEl) totalSpecsEl.textContent = overall.totalSpecs;
+                if (completedTasksEl) completedTasksEl.textContent = overall.completedTasks;
+                if (pendingTasksEl) pendingTasksEl.textContent = overall.pendingTasks;
+                if (overallPercentageEl) overallPercentageEl.textContent = overall.percentage + '%';
 
                 statsContainer.style.display = 'block';
 
@@ -2479,44 +2546,23 @@
             const specList = document.getElementById('specList');
             const paginationContainer = document.getElementById('paginationContainer');
             
+            // Determine unique workspace folders from ALL filtered specs (before pagination)
+            const allSeenFolders = new Map();
+            for (const spec of filteredSpecs) {
+                const folder = spec.workspaceFolder || '';
+                if (!allSeenFolders.has(folder)) {
+                    allSeenFolders.set(folder, []);
+                }
+                allSeenFolders.get(folder).push(spec);
+            }
+            const allUniqueFolders = Array.from(allSeenFolders.keys());
+            const hasMultipleFolders = allUniqueFolders.length >= 2;
+
             let pageSpecs;
             let listHTML = '';
-            
-            if (currentState.itemsPerPage === 'all') {
-                pageSpecs = filteredSpecs;
-                paginationContainer.innerHTML = '';
-            } else {
-                const startIndex = (page - 1) * currentState.itemsPerPage;
-                const endIndex = startIndex + currentState.itemsPerPage;
-                pageSpecs = filteredSpecs.slice(startIndex, endIndex);
-                
-                const totalPages = Math.ceil(filteredSpecs.length / currentState.itemsPerPage);
-                if (totalPages > 1) {
-                    paginationContainer.innerHTML = createPaginationControls(page, totalPages);
-                } else {
-                    paginationContainer.innerHTML = '';
-                }
-            }
 
-            // Build a nested group tree from specs
-            const groupTree = { specs: [], children: new Map() }; // root node
+            // Helper functions for group tree rendering (must be defined before use)
             
-            for (const spec of pageSpecs) {
-                if (spec.group) {
-                    const segments = spec.group.split('/');
-                    let node = groupTree;
-                    for (const seg of segments) {
-                        if (!node.children.has(seg)) {
-                            node.children.set(seg, { specs: [], children: new Map() });
-                        }
-                        node = node.children.get(seg);
-                    }
-                    node.specs.push(spec);
-                } else {
-                    groupTree.specs.push(spec);
-                }
-            }
-
             // Count all specs under a tree node (recursive)
             function countSpecs(node) {
                 let count = node.specs.length;
@@ -2535,20 +2581,33 @@
                 return all;
             }
 
+            // Helper to reconstruct the full group path for collapse tracking
+            const groupPathStack = [];
+            function getGroupFullPath(parentNode, key, depth) {
+                groupPathStack[depth] = key;
+                return groupPathStack.slice(0, depth + 1).join('/');
+            }
+
             // Create a group summary card
             function createGroupSummaryCard(groupName, specs) {
                 if (specs.length <= 1) return '';
                 let total = 0, completed = 0, optional = 0;
+                let compReq = 0, compOpt = 0;
                 let done = 0, active = 0, todo = 0;
                 for (const s of specs) {
                     total += s.totalTasks || 0;
                     completed += s.completedTasks || 0;
                     optional += s.optionalTasks || 0;
+                    compReq += s.completedRequired || 0;
+                    compOpt += s.completedOptional || 0;
                     if (s.progress === 100) done++;
                     else if (s.progress > 0) active++;
                     else todo++;
                 }
                 const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                const gReqTotal = total - optional;
+                const gReqPct = total > 0 ? Math.round((compReq / total) * 100) : 0;
+                const gOptPct = total > 0 ? Math.round((compOpt / total) * 100) : 0;
                 let badge = '';
                 if (pct === 100) badge = '<span class="spec-badge">DONE</span>';
                 else if (pct > 0) badge = '<span class="spec-badge">ACTIVE</span>';
@@ -2570,17 +2629,17 @@
                             <div class="spec-stat"><span>${todo} todo</span></div>
                         </div>
                         <div class="spec-progress-bar">
-                            <div class="spec-progress-fill" style="width: ${pct}%"></div>
+                            <div class="spec-progress-fill required" style="width: ${gReqPct}%"></div>
+                            ${optional > 0 ? `<div class="spec-progress-fill optional" style="width: ${gOptPct}%"></div>` : ''}
                         </div>
+                        <div class="progress-breakdown">${compReq}/${gReqTotal} required${optional > 0 ? ` · ${compOpt}/${optional} optional` : ''}</div>
                     </li>`;
             }
 
             // Render a group tree node recursively
             function renderGroupNode(node, depth) {
                 let html = '';
-                // Render direct specs at this level
                 html += node.specs.map(spec => createSpecListItem(spec)).join('');
-                // Render child groups sorted alphabetically
                 const sortedKeys = Array.from(node.children.keys()).sort();
                 for (const key of sortedKeys) {
                     const child = node.children.get(key);
@@ -2607,22 +2666,132 @@
                 }
                 return html;
             }
+            
+            if (hasMultipleFolders) {
+                // Per-folder pagination: each workspace folder paginates independently
+                paginationContainer.innerHTML = ''; // No global pagination
+                
+                for (const folder of allUniqueFolders) {
+                    const folderAllSpecs = allSeenFolders.get(folder);
+                    const folderDisplayName = folder || 'Unknown';
+                    const isCollapsed = collapsedWorkspaceFolders.has(folderDisplayName);
+                    
+                    // Get per-folder page
+                    const folderPage = folderPages[folderDisplayName] || 1;
+                    let folderPageSpecs;
+                    let folderPaginationHTML = '';
+                    
+                    if (currentState.itemsPerPage === 'all') {
+                        folderPageSpecs = folderAllSpecs;
+                    } else {
+                        const perPage = parseInt(currentState.itemsPerPage) || 10;
+                        const startIndex = (folderPage - 1) * perPage;
+                        const endIndex = startIndex + perPage;
+                        folderPageSpecs = folderAllSpecs.slice(startIndex, endIndex);
+                        
+                        const totalPages = Math.ceil(folderAllSpecs.length / perPage);
+                        if (totalPages > 1) {
+                            folderPaginationHTML = createFolderPaginationControls(folderDisplayName, folderPage, totalPages, folderAllSpecs.length);
+                        }
+                    }
 
-            // Helper to reconstruct the full group path for collapse tracking
-            // We build it by walking the tree during rendering
-            const groupPathStack = [];
-            function getGroupFullPath(parentNode, key, depth) {
-                groupPathStack[depth] = key;
-                return groupPathStack.slice(0, depth + 1).join('/');
+                    // Build group tree for this folder's page specs
+                    const folderGroupTree = { specs: [], children: new Map() };
+                    for (const spec of folderPageSpecs) {
+                        if (spec.group) {
+                            const segments = spec.group.split('/');
+                            let node = folderGroupTree;
+                            for (const seg of segments) {
+                                if (!node.children.has(seg)) {
+                                    node.children.set(seg, { specs: [], children: new Map() });
+                                }
+                                node = node.children.get(seg);
+                            }
+                            node.specs.push(spec);
+                        } else {
+                            folderGroupTree.specs.push(spec);
+                        }
+                    }
+
+                    listHTML += `
+                        <li class="spec-group-header ${isCollapsed ? 'collapsed' : ''}" 
+                            data-workspace-folder="${escapeHtml(folderDisplayName)}">
+                            <span class="codicon codicon-chevron-down"></span>
+                            ${escapeHtml(folderDisplayName)}
+                            <span class="group-count">${folderAllSpecs.length}</span>
+                        </li>
+                        <div class="spec-group-items ${isCollapsed ? 'collapsed' : ''}" 
+                             data-workspace-folder-items="${escapeHtml(folderDisplayName)}">
+                            ${renderGroupNode(folderGroupTree, 0)}
+                            ${folderPaginationHTML}
+                        </div>
+                    `;
+                }
+                
+                // pageSpecs not used for rendering in multi-folder mode, but set for compatibility
+                pageSpecs = filteredSpecs;
+            } else {
+                // Single folder: use global pagination as before
+                if (currentState.itemsPerPage === 'all') {
+                    pageSpecs = filteredSpecs;
+                    paginationContainer.innerHTML = '';
+                } else {
+                    const startIndex = (page - 1) * currentState.itemsPerPage;
+                    const endIndex = startIndex + currentState.itemsPerPage;
+                    pageSpecs = filteredSpecs.slice(startIndex, endIndex);
+                    
+                    const totalPages = Math.ceil(filteredSpecs.length / currentState.itemsPerPage);
+                    if (totalPages > 1) {
+                        paginationContainer.innerHTML = createPaginationControls(page, totalPages);
+                    } else {
+                        paginationContainer.innerHTML = '';
+                    }
+                }
+
+                // Build a nested group tree from specs
+                const groupTree = { specs: [], children: new Map() };
+                
+                for (const spec of pageSpecs) {
+                    if (spec.group) {
+                        const segments = spec.group.split('/');
+                        let node = groupTree;
+                        for (const seg of segments) {
+                            if (!node.children.has(seg)) {
+                                node.children.set(seg, { specs: [], children: new Map() });
+                            }
+                            node = node.children.get(seg);
+                        }
+                        node.specs.push(spec);
+                    } else {
+                        groupTree.specs.push(spec);
+                    }
+                }
+
+                listHTML = renderGroupNode(groupTree, 0);
             }
-
-            // Render ungrouped specs first, then the group tree
-            listHTML = renderGroupNode(groupTree, 0);
 
             specList.innerHTML = listHTML;
             
-            // Attach group toggle listeners
-            specList.querySelectorAll('.spec-group-header').forEach(header => {
+            // Attach workspace folder toggle listeners
+            specList.querySelectorAll('.spec-group-header[data-workspace-folder]').forEach(header => {
+                header.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const folder = header.getAttribute('data-workspace-folder');
+                    const items = specList.querySelector(`[data-workspace-folder-items="${folder}"]`);
+                    header.classList.toggle('collapsed');
+                    if (items) {
+                        items.classList.toggle('collapsed');
+                    }
+                    if (header.classList.contains('collapsed')) {
+                        collapsedWorkspaceFolders.add(folder);
+                    } else {
+                        collapsedWorkspaceFolders.delete(folder);
+                    }
+                });
+            });
+
+            // Attach group toggle listeners (for path-based groups within folders)
+            specList.querySelectorAll('.spec-group-header[data-group]').forEach(header => {
                 header.addEventListener('click', () => {
                     const group = header.getAttribute('data-group');
                     const items = specList.querySelector(`[data-group-items="${group}"]`);
@@ -2654,6 +2823,11 @@
             const completedTasks = spec.completedTasks || 0;
             const pendingTasks = totalTasks - completedTasks;
             const optionalTasks = spec.optionalTasks || 0;
+            const completedRequired = spec.completedRequired || 0;
+            const completedOptional = spec.completedOptional || 0;
+            const requiredTotal = totalTasks - optionalTasks;
+            const requiredPct = totalTasks > 0 ? Math.round((completedRequired / totalTasks) * 100) : 0;
+            const optionalPct = totalTasks > 0 ? Math.round((completedOptional / totalTasks) * 100) : 0;
             
             let statusBadge = '';
             if (progress === 100) {
@@ -2693,18 +2867,29 @@
 
             // Build extra task-like file breakdown rows
             let extraFilesBreakdownHTML = '';
-            const taskLikeFiles = (spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
+            const allTaskLikeFiles = (spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
+            // Filter out hidden extra files based on visibility settings
+            const taskLikeFiles = allTaskLikeFiles.filter(m => {
+                const baseName = (m.fileName || '').replace(/\.md$/, '');
+                return currentSettings?.extraFileVisibility?.[baseName] !== false;
+            });
 
             // Build per-file status rows (tasks.md + each extra task-like file)
             const hasExtraTaskFiles = taskLikeFiles.length > 0;
             let perFileStatsHTML = '';
             if (hasExtraTaskFiles) {
                 // tasks.md row
-                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, optionalTasks: 0, progress: 0 };
+                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, optionalTasks: 0, completedRequired: 0, completedOptional: 0, progress: 0 };
                 let tBadge = '';
                 if (tfs.progress === 100) { tBadge = '<span class="spec-badge">DONE</span>'; }
                 else if (tfs.progress > 0) { tBadge = '<span class="spec-badge">ACTIVE</span>'; }
                 else { tBadge = '<span class="spec-badge">TODO</span>'; }
+
+                const tfsCompReq = tfs.completedRequired || 0;
+                const tfsCompOpt = tfs.completedOptional || 0;
+                const tfsReqTotal = (tfs.totalTasks || 0) - (tfs.optionalTasks || 0);
+                const tfsReqPct = (tfs.totalTasks || 0) > 0 ? Math.round((tfsCompReq / (tfs.totalTasks || 0)) * 100) : 0;
+                const tfsOptPct = (tfs.totalTasks || 0) > 0 ? Math.round((tfsCompOpt / (tfs.totalTasks || 0)) * 100) : 0;
 
                 perFileStatsHTML += `
                     <div class="file-stats-row">
@@ -2717,16 +2902,23 @@
                         </div>
                     </div>
                     <div class="file-progress-bar">
-                        <div class="file-progress-fill" style="width: ${tfs.progress}%"></div>
-                    </div>`;
+                        <div class="file-progress-fill required" style="width: ${tfsReqPct}%"></div>
+                        ${(tfs.optionalTasks || 0) > 0 ? `<div class="file-progress-fill optional" style="width: ${tfsOptPct}%"></div>` : ''}
+                    </div>
+                    <div class="progress-breakdown">${tfsCompReq}/${tfsReqTotal} required${(tfs.optionalTasks || 0) > 0 ? ` · ${tfsCompOpt}/${tfs.optionalTasks} optional` : ''}</div>`;
 
                 // Extra file rows
                 taskLikeFiles.forEach(meta => {
                     const fTotal = meta.totalTasks || 0;
                     const fCompleted = meta.completedTasks || 0;
                     const fOptional = meta.optionalTasks || 0;
+                    const fCompReq = meta.completedRequired || 0;
+                    const fCompOpt = meta.completedOptional || 0;
+                    const fReqTotal = fTotal - fOptional;
                     const fPct = fTotal > 0 ? Math.round((fCompleted / fTotal) * 100) : 0;
-                    const fName = (meta.fileName || '').replace(/\.md$/, '');
+                    const fReqPct = fTotal > 0 ? Math.round((fCompReq / fTotal) * 100) : 0;
+                    const fOptPct = fTotal > 0 ? Math.round((fCompOpt / fTotal) * 100) : 0;
+                    const fLabel = getExtraFileLabel(meta.fileName, currentSettings);
                     let fBadge = '';
                     if (fPct === 100) { fBadge = '<span class="spec-badge">DONE</span>'; }
                     else if (fPct > 0) { fBadge = '<span class="spec-badge">ACTIVE</span>'; }
@@ -2734,7 +2926,7 @@
 
                     perFileStatsHTML += `
                         <div class="file-stats-row">
-                            <span class="file-stats-label extra-file-name" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}"><span class="codicon codicon-checklist"></span> ${escapeHtml(fName)}</span>
+                            <span class="file-stats-label extra-file-name" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}"><span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}</span>
                             <div class="file-stats-values">
                                 ${fBadge}
                                 <span>${fPct}%</span>
@@ -2743,8 +2935,10 @@
                             </div>
                         </div>
                         <div class="file-progress-bar">
-                            <div class="file-progress-fill" style="width: ${fPct}%"></div>
-                        </div>`;
+                            <div class="file-progress-fill required" style="width: ${fReqPct}%"></div>
+                            ${fOptional > 0 ? `<div class="file-progress-fill optional" style="width: ${fOptPct}%"></div>` : ''}
+                        </div>
+                        <div class="progress-breakdown">${fCompReq}/${fReqTotal} required${fOptional > 0 ? ` · ${fCompOpt}/${fOptional} optional` : ''}</div>`;
                 });
             }
 
@@ -2752,9 +2946,9 @@
             let extraFileActionsHTML = '';
             if (taskLikeFiles.length > 0) {
                 extraFileActionsHTML = taskLikeFiles.map(meta => {
-                    const fName = (meta.fileName || '').replace(/\.md$/, '');
+                    const fLabel = getExtraFileLabel(meta.fileName, currentSettings);
                     return `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}">
-                            <span class="codicon codicon-checklist"></span> ${escapeHtml(fName)}
+                            <span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}
                         </button>`;
                 }).join('');
             }
@@ -2777,8 +2971,10 @@
                         ${optionalTasks > 0 ? `<div class="spec-stat"><span>${optionalTasks} optional</span></div>` : ''}
                     </div>
                     <div class="spec-progress-bar">
-                        <div class="spec-progress-fill" style="width: ${progress}%"></div>
+                        <div class="spec-progress-fill required" style="width: ${requiredPct}%"></div>
+                        ${optionalTasks > 0 ? `<div class="spec-progress-fill optional" style="width: ${optionalPct}%"></div>` : ''}
                     </div>
+                    <div class="progress-breakdown">${completedRequired}/${requiredTotal} required${optionalTasks > 0 ? ` · ${completedOptional}/${optionalTasks} optional` : ''}</div>
                     ${perFileStatsHTML}
                     <div class="spec-actions">
                         <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="requirements.md" title="Open requirements.md">
@@ -2845,6 +3041,41 @@
             displayPage(page);
             saveState();
         }
+
+        // Change to a specific page for a workspace folder (per-folder pagination)
+        function changeFolderPage(folderName, page) {
+            folderPages[folderName] = page;
+            displayPage(currentState.currentPage);
+        }
+
+        // Create per-folder pagination controls HTML
+        function createFolderPaginationControls(folderName, currentPage, totalPages, totalItems) {
+            const perPage = parseInt(currentState.itemsPerPage) || 10;
+            const startItem = (currentPage - 1) * perPage + 1;
+            const endItem = Math.min(currentPage * perPage, totalItems);
+            
+            let html = `<div class="pagination" data-folder-pagination="${escapeHtml(folderName)}">`;
+            
+            html += `<button class="pagination-btn folder-page-btn" data-folder="${escapeHtml(folderName)}" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>
+                <span class="codicon codicon-chevron-left"></span> Prev
+            </button>`;
+            
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                    html += `<button class="pagination-btn folder-page-btn ${i === currentPage ? 'active' : ''}" data-folder="${escapeHtml(folderName)}" data-page="${i}">${i}</button>`;
+                } else if (i === currentPage - 2 || i === currentPage + 2) {
+                    html += '<span class="pagination-info">...</span>';
+                }
+            }
+            
+            html += `<button class="pagination-btn folder-page-btn" data-folder="${escapeHtml(folderName)}" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>
+                Next <span class="codicon codicon-chevron-right"></span>
+            </button>`;
+            
+            html += `<span class="pagination-info">${startItem}-${endItem} of ${totalItems}</span>`;
+            html += '</div>';
+            return html;
+        }
         
         // View spec details (placeholder for task 12)
         function viewSpecDetails(specName) {
@@ -2856,12 +3087,12 @@
         
         // Open a specific spec file in the editor
         function openSpecFile(specName, fileName) {
-            console.log('openSpecFile called:', specName, fileName);
-            console.log('All specs:', allSpecs);
+            //console.log('openSpecFile called:', specName, fileName);
+            //console.log('All specs:', allSpecs);
             
             // Find the spec to get its path
             const spec = allSpecs.find(s => s.name === specName);
-            console.log('Found spec:', spec);
+            //console.log('Found spec:', spec);
             
             if (!spec) {
                 showError(`Spec not found: ${specName}`);
@@ -2876,8 +3107,8 @@
             
             // Construct the full file path
             const filePath = `${spec.path}/${fileName}`;
-            console.log('Opening file:', filePath);
-            console.log('File path components - spec.path:', spec.path, 'fileName:', fileName);
+            //console.log('Opening file:', filePath);
+            //console.log('File path components - spec.path:', spec.path, 'fileName:', fileName);
             
             // Send message to extension to open the file
             vscode.postMessage({
@@ -2994,7 +3225,11 @@
                 // Filter to only non-task-like files (task-like ones have their own UI)
                 const nonTaskFiles = spec.extraFiles.filter(fileName => {
                     const meta = spec.extraFilesMetadata && spec.extraFilesMetadata.find(m => m.fileName === fileName);
-                    return !(meta && meta.isTaskLike);
+                    if (meta && meta.isTaskLike) return false;
+                    // Apply visibility filtering
+                    const baseName = fileName.replace(/\.md$/, '');
+                    if (currentSettings?.extraFileVisibility?.[baseName] === false) return false;
+                    return true;
                 });
 
                 if (nonTaskFiles.length > 0) {
@@ -3005,8 +3240,8 @@
                     nonTaskFiles.forEach(fileName => {
                         const item = document.createElement('div');
                         item.className = 'more-dropdown-item';
-                        const displayName = fileName.replace(/\.md$/, '');
-                        item.innerHTML = `<span class="codicon codicon-markdown"></span> ${escapeHtml(displayName)}`;
+                        const displayLabel = getExtraFileLabel(fileName, currentSettings);
+                        item.innerHTML = `<span class="codicon codicon-markdown"></span> ${escapeHtml(displayLabel)}`;
 
                         item.addEventListener('click', function(e) {
                             e.stopPropagation();
@@ -3047,7 +3282,12 @@
 
             // Build per-file execution sections
             const spec = allSpecs.find(s => s.name === specId);
-            const taskLikeMeta = (spec && spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
+            const allTaskLikeMeta = (spec && spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
+            // Filter out hidden extra files based on visibility settings
+            const taskLikeMeta = allTaskLikeMeta.filter(m => {
+                const baseName = (m.fileName || '').replace(/\.md$/, '');
+                return currentSettings?.extraFileVisibility?.[baseName] !== false;
+            });
 
             // Helper to create a file section with profiles
             function addFileSection(label, icon, fileName, stats) {
@@ -3079,8 +3319,8 @@
 
                 // Extra file sections
                 taskLikeMeta.forEach(meta => {
-                    const fName = (meta.fileName || '').replace(/\.md$/, '');
-                    addFileSection(fName, 'checklist', meta.fileName, { completed: meta.completedTasks || 0, total: meta.totalTasks || 0 });
+                    const fLabel = getExtraFileLabel(meta.fileName, currentSettings);
+                    addFileSection(fLabel, 'checklist', meta.fileName, { completed: meta.completedTasks || 0, total: meta.totalTasks || 0 });
                 });
             } else {
                 // No extra files — just show profiles for the whole spec
@@ -3117,7 +3357,7 @@
 
         // Execute a spec with a profile
         function executeSpec(specId, profileId, targetFile) {
-            console.log('Executing spec:', specId, 'with profile:', profileId, 'targetFile:', targetFile);
+            //console.log('Executing spec:', specId, 'with profile:', profileId, 'targetFile:', targetFile);
             
             const msg = {
                 type: 'executeSpec',
@@ -3132,7 +3372,7 @@
 
         // Cancel an execution
         function cancelExecution(executionId) {
-            console.log('Cancelling execution:', executionId);
+            //console.log('Cancelling execution:', executionId);
             
             vscode.postMessage({
                 type: 'cancelExecution',
@@ -3142,13 +3382,29 @@
         
         // Attach event listeners to pagination buttons
         function attachPaginationListeners() {
-            const paginationButtons = document.querySelectorAll('.pagination-btn');
+            // Global pagination buttons (single-folder mode)
+            const paginationButtons = document.querySelectorAll('.pagination-btn:not(.folder-page-btn)');
             paginationButtons.forEach(button => {
                 button.addEventListener('click', function() {
                     if (!this.disabled) {
                         const page = parseInt(this.getAttribute('data-page'));
                         if (page) {
                             changePage(page);
+                        }
+                    }
+                });
+            });
+            
+            // Per-folder pagination buttons (multi-folder mode)
+            const folderPageButtons = document.querySelectorAll('.folder-page-btn');
+            folderPageButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (!this.disabled) {
+                        const folder = this.getAttribute('data-folder');
+                        const page = parseInt(this.getAttribute('data-page'));
+                        if (folder && page) {
+                            changeFolderPage(folder, page);
                         }
                     }
                 });
@@ -3192,6 +3448,16 @@
             return name.split('-').map(word => 
                 word.charAt(0).toUpperCase() + word.slice(1)
             ).join(' ');
+        }
+
+        // Resolve extra file display label: use configured label if available, otherwise hyphen-to-title-case
+        function getExtraFileLabel(fileName, settings) {
+            const baseName = fileName.replace(/\.md$/, '');
+            if (settings?.extraFileLabels?.[baseName]) {
+                return settings.extraFileLabels[baseName];
+            }
+            // Default: hyphen-to-title-case
+            return baseName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         }
         
         /**
@@ -4274,7 +4540,7 @@
             
             marked.use({ renderer });
             
-            console.log('marked.js configured for GitHub Flavored Markdown');
+            //console.log('marked.js configured for GitHub Flavored Markdown');
         } else {
             console.error('marked.js library not loaded');
         }
@@ -4318,7 +4584,7 @@
                     classPrefix: 'hljs-'        // CSS class prefix for syntax elements
                 });
                 
-                console.log('highlight.js configured for syntax highlighting');
+                //console.log('highlight.js configured for syntax highlighting');
             } else {
                 console.warn('highlight.js library not loaded yet, will retry');
                 // Retry after a short delay
@@ -4352,7 +4618,7 @@
                     }
                 });
                 
-                console.log(`Applied syntax highlighting to ${codeBlocks.length} code block(s)`);
+                //console.log(`Applied syntax highlighting to ${codeBlocks.length} code block(s)`);
             } catch (error) {
                 console.error('Error applying syntax highlighting:', error);
                 
@@ -4438,7 +4704,7 @@
                     }
                 });
                 
-                console.log('mermaid.js configured for diagram rendering');
+                //console.log('mermaid.js configured for diagram rendering');
             } catch (error) {
                 console.error('Error configuring mermaid.js:', error);
             }
@@ -4464,7 +4730,7 @@
                     return;
                 }
                 
-                console.log(`Found ${mermaidBlocks.length} mermaid diagram(s) to render`);
+                //console.log(`Found ${mermaidBlocks.length} mermaid diagram(s) to render`);
                 
                 for (let i = 0; i < mermaidBlocks.length; i++) {
                     const block = mermaidBlocks[i];
@@ -4511,7 +4777,7 @@
                     }
                 }
                 
-                console.log('Mermaid diagram rendering complete');
+                //console.log('Mermaid diagram rendering complete');
             } catch (error) {
                 console.error('Error in renderMermaidDiagrams:', error);
                 

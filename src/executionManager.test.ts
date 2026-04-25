@@ -29,6 +29,12 @@ jest.mock('vscode', () => ({
     fs: {
       readFile: jest.fn()
     }
+  },
+  env: {
+    clipboard: {
+      readText: jest.fn().mockResolvedValue(''),
+      writeText: jest.fn().mockResolvedValue(undefined)
+    }
   }
 }));
 
@@ -91,6 +97,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50,
         workspaceFolder: 'test-workspace'
       };
@@ -115,7 +123,7 @@ describe('ExecutionManager', () => {
       mockProfileManager.instantiateTemplate.mockReturnValue('Execute test-spec');
 
       // Mock vscode.commands
-      (vscode.commands.getCommands as jest.Mock).mockResolvedValue(['kiro.sendMessage']);
+      (vscode.commands.getCommands as jest.Mock).mockResolvedValue(['kiroAgent.executions.queueUserMessage']);
       (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
 
       // Act
@@ -126,7 +134,7 @@ describe('ExecutionManager', () => {
       expect(result.executionId).toBeDefined();
       expect(mockProfileManager.getProfile).toHaveBeenCalledWith('mvp', workspaceFolder);
       expect(mockProfileManager.instantiateTemplate).toHaveBeenCalledWith(profile, spec);
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith('kiro.sendMessage', 'Execute test-spec');
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith('kiroAgent.executions.queueUserMessage', 'Execute test-spec');
     });
 
     it('should fail if profile not found', async () => {
@@ -137,6 +145,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -164,6 +174,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -191,7 +203,7 @@ describe('ExecutionManager', () => {
 
       // Assert
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Kiro chat interface is not available');
+      expect(result.error).toContain('No suitable chat command found');
     });
   });
 
@@ -204,6 +216,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -256,6 +270,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -309,6 +325,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -352,6 +370,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -398,6 +418,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -443,6 +465,8 @@ describe('ExecutionManager', () => {
         totalTasks: 10,
         completedTasks: 5,
         optionalTasks: 2,
+        completedRequired: 3,
+        completedOptional: 2,
         progress: 50
       };
 
@@ -452,6 +476,8 @@ describe('ExecutionManager', () => {
         totalTasks: 8,
         completedTasks: 3,
         optionalTasks: 1,
+        completedRequired: 2,
+        completedOptional: 1,
         progress: 37.5
       };
 

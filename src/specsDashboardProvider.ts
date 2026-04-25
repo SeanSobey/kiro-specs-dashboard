@@ -164,7 +164,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    * Requirements: 3.2, 3.3, 3.4, 13.5
    */
   async refresh(uri?: vscode.Uri): Promise<void> {
-    console.log('Refreshing specs dashboard...', uri?.fsPath || 'all specs');
+    //console.log('Refreshing specs dashboard...', uri?.fsPath || 'all specs');
     
     // Performance optimization: Defer refresh if webview is hidden (Requirement 13.5)
     if (!this.isWebviewVisible) {
@@ -246,7 +246,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       this.specs = this.specs.filter(spec => spec.workspaceFolder !== workspaceFolderName);
       const removedCount = previousCount - this.specs.length;
       
-      console.log(`Cleaned up ${removedCount} spec(s) from workspace folder: ${workspaceFolderName}`);
+      //console.log(`Cleaned up ${removedCount} spec(s) from workspace folder: ${workspaceFolderName}`);
     } catch (error) {
       console.error(`Error cleaning up workspace folder ${workspaceFolderName}:`, error);
     }
@@ -277,6 +277,50 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
 
       this.outputChannel.appendLine(`[${new Date().toISOString()}] Loaded ${currentCount} spec(s) (previously ${previousCount})`);
 
+      // Read extra file label and visibility settings (Requirements: 2.2, 2.5, 2.7)
+      const config = vscode.workspace.getConfiguration('kiroSpecsDashboard');
+      const extraFileLabels = config.get<Record<string, string>>('extraFileLabels') ?? {};
+      const extraFileVisibility = config.get<Record<string, boolean>>('extraFileVisibility') ?? {};
+
+      // Filter hidden extra files from aggregated task counts (Requirement 2.7)
+      for (const spec of this.specs) {
+        if (spec.extraFilesMetadata && spec.extraFilesMetadata.length > 0) {
+          // Recalculate aggregated stats excluding hidden extra files
+          const tasksFileStats = spec.tasksFileStats ?? { totalTasks: 0, completedTasks: 0, optionalTasks: 0, completedRequired: 0, completedOptional: 0, progress: 0 };
+          let aggregatedTotal = tasksFileStats.totalTasks;
+          let aggregatedCompleted = tasksFileStats.completedTasks;
+          let aggregatedOptional = tasksFileStats.optionalTasks;
+          let aggregatedCompletedRequired = tasksFileStats.completedRequired;
+          let aggregatedCompletedOptional = tasksFileStats.completedOptional;
+
+          for (const meta of spec.extraFilesMetadata) {
+            if (meta.isTaskLike) {
+              const baseName = meta.fileName.replace(/\.md$/, '');
+              // Skip hidden extra files from aggregation
+              if (extraFileVisibility[baseName] === false) {
+                continue;
+              }
+              aggregatedTotal += meta.totalTasks!;
+              aggregatedCompleted += meta.completedTasks!;
+              aggregatedOptional += meta.optionalTasks!;
+              aggregatedCompletedRequired += meta.completedRequired ?? 0;
+              aggregatedCompletedOptional += meta.completedOptional ?? 0;
+            }
+          }
+
+          const aggregatedProgress = aggregatedTotal > 0
+            ? Math.round((aggregatedCompleted / aggregatedTotal) * 100)
+            : 0;
+
+          spec.totalTasks = aggregatedTotal;
+          spec.completedTasks = aggregatedCompleted;
+          spec.optionalTasks = aggregatedOptional;
+          spec.completedRequired = aggregatedCompletedRequired;
+          spec.completedOptional = aggregatedCompletedOptional;
+          spec.progress = aggregatedProgress;
+        }
+      }
+
       // Detect task changes and record velocity data
       await this.detectAndRecordTaskChanges(previousSpecs, this.specs);
 
@@ -288,7 +332,11 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
         this.view.webview.postMessage({
           type: 'specsLoaded',
           specs: this.specs,
-          state: dashboardState
+          state: dashboardState,
+          settings: {
+            extraFileLabels,
+            extraFileVisibility
+          }
         });
         this.outputChannel.appendLine(`[${new Date().toISOString()}] Sent updated specs and state to webview`);
       } else if (this.view && !this.isWebviewVisible) {
@@ -1104,7 +1152,19 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       spec.totalTasks = taskStats.totalTasks;
       spec.completedTasks = taskStats.completedTasks;
       spec.optionalTasks = taskStats.optionalTasks;
+      spec.completedRequired = taskStats.completedRequired;
+      spec.completedOptional = taskStats.completedOptional;
       spec.progress = taskStats.progress;
+
+      // Update tasksFileStats as well (Requirements: 4.8)
+      if (spec.tasksFileStats) {
+        spec.tasksFileStats.totalTasks = taskStats.totalTasks;
+        spec.tasksFileStats.completedTasks = taskStats.completedTasks;
+        spec.tasksFileStats.optionalTasks = taskStats.optionalTasks;
+        spec.tasksFileStats.completedRequired = taskStats.completedRequired;
+        spec.tasksFileStats.completedOptional = taskStats.completedOptional;
+        spec.tasksFileStats.progress = taskStats.progress;
+      }
       
       // Record task completion in velocity tracker (Requirements: 19.2, 19.6)
       // Only record when task is marked as completed (not when uncompleted)
@@ -1288,11 +1348,15 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
           spec.totalTasks = spec.totalTasks - (meta.totalTasks || 0) + newFileStats.totalTasks;
           spec.completedTasks = spec.completedTasks - (meta.completedTasks || 0) + newFileStats.completedTasks;
           spec.optionalTasks = spec.optionalTasks - (meta.optionalTasks || 0) + newFileStats.optionalTasks;
+          spec.completedRequired = (spec.completedRequired || 0) - (meta.completedRequired || 0) + newFileStats.completedRequired;
+          spec.completedOptional = (spec.completedOptional || 0) - (meta.completedOptional || 0) + newFileStats.completedOptional;
           spec.progress = spec.totalTasks > 0 ? Math.round((spec.completedTasks / spec.totalTasks) * 100) : 0;
 
           meta.totalTasks = newFileStats.totalTasks;
           meta.completedTasks = newFileStats.completedTasks;
           meta.optionalTasks = newFileStats.optionalTasks;
+          meta.completedRequired = newFileStats.completedRequired;
+          meta.completedOptional = newFileStats.completedOptional;
         }
       }
 
@@ -1475,16 +1539,20 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
     totalTasks: number;
     completedTasks: number;
     optionalTasks: number;
+    completedRequired: number;
+    completedOptional: number;
     progress: number;
   } {
     if (!content || content.trim().length === 0) {
-      return { totalTasks: 0, completedTasks: 0, optionalTasks: 0, progress: 0 };
+      return { totalTasks: 0, completedTasks: 0, optionalTasks: 0, completedRequired: 0, completedOptional: 0, progress: 0 };
     }
 
     const lines = content.split('\n');
     let totalTasks = 0;
     let completedTasks = 0;
     let optionalTasks = 0;
+    let completedRequired = 0;
+    let completedOptional = 0;
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -1502,6 +1570,11 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
         // Count as completed if marked with 'x' (in progress/queued count as not completed)
         if (state === 'x') {
           completedTasks++;
+          if (isOptional) {
+            completedOptional++;
+          } else {
+            completedRequired++;
+          }
         }
         
         if (isOptional) {
@@ -1514,7 +1587,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       ? Math.round((completedTasks / totalTasks) * 100)
       : 0;
 
-    return { totalTasks, completedTasks, optionalTasks, progress };
+    return { totalTasks, completedTasks, optionalTasks, completedRequired, completedOptional, progress };
   }
 
   /**
@@ -3044,7 +3117,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    * Requirements: 13.4
    */
   dispose(): void {
-    console.log('Disposing SpecsDashboardProvider resources...');
+    //console.log('Disposing SpecsDashboardProvider resources...');
     
     // Dispose output channel
     if (this.outputChannel) {
@@ -3074,6 +3147,6 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
     this.isWebviewVisible = false;
     this.pendingRefresh = false;
     
-    console.log('SpecsDashboardProvider resources disposed');
+    //console.log('SpecsDashboardProvider resources disposed');
   }
 }
