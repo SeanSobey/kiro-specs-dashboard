@@ -152,6 +152,37 @@
           "additionalProperties": {
             "type": "boolean"
           }
+        },
+        "kiroSpecsDashboard.specFileConfig": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Per-file display configuration for spec panels. Keys are file names without `.md` extension (e.g. `tasks`, `test-cases`, `requirements`, `design`). An empty object (default) shows all files with default behaviour.\n\nExample:\n```json\n{\n  \"tasks\": { \"showStats\": true, \"showAction\": true },\n  \"test-cases\": { \"label\": \"Test Cases\", \"showStats\": true, \"showAction\": true, \"icon\": \"beaker\" },\n  \"requirements\": { \"showAction\": true },\n  \"design\": { \"showAction\": true },\n  \"acceptance-criteria\": { \"visible\": false }\n}\n```",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Custom display label for this file."
+              },
+              "visible": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether this file is visible at all. Set false to hide completely."
+              },
+              "showStats": {
+                "type": "boolean",
+                "description": "Show task progress stats panel (progress bar, counts) for task-like files. Defaults to true for task-like files."
+              },
+              "showAction": {
+                "type": "boolean",
+                "description": "Show as an action button at the bottom of the spec card. Defaults to true for standard files (requirements, design, tasks) and task-like extra files."
+              },
+              "icon": {
+                "type": "string",
+                "description": "VSCode codicon name for the action button (e.g. 'beaker', 'file', 'checklist'). Defaults vary by file type."
+              }
+            }
+          }
         }
       }
     },

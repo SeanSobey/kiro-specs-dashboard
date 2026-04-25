@@ -27,6 +27,7 @@ const MVP_PROFILE: ExecutionProfile = {
   icon: 'rocket',
   description: 'Execute only required tasks to complete the minimum viable product',
   promptTemplate: `Execute the spec "{{specName}}" located at {{specPath}}.
+Target file: {{targetFile}}
 
 Focus on required tasks only (skip optional tasks marked with *).
 
@@ -35,7 +36,7 @@ Total tasks: {{totalTasks}}
 Completed: {{completedTasks}}
 Remaining: {{remainingTasks}}
 
-Please execute all remaining required tasks in order.`,
+Please execute all remaining required tasks in {{targetFile}} in order.`,
   isBuiltIn: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
@@ -47,6 +48,7 @@ const FULL_PROFILE: ExecutionProfile = {
   icon: 'checklist',
   description: 'Execute all tasks including optional ones for complete implementation',
   promptTemplate: `Execute the spec "{{specName}}" located at {{specPath}}.
+Target file: {{targetFile}}
 
 Execute ALL tasks including optional ones.
 
@@ -55,7 +57,7 @@ Total tasks: {{totalTasks}}
 Completed: {{completedTasks}}
 Remaining: {{remainingTasks}}
 
-Please execute all remaining tasks in order, including optional tasks.`,
+Please execute all remaining tasks in {{targetFile}} in order, including optional tasks.`,
   isBuiltIn: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
@@ -88,7 +90,7 @@ export class ProfileManager {
     }
     
     const allProfiles: ExecutionProfile[] = [];
-    const profileIdCounts: Map<string, number> = new Map();
+    const seenProfileIds: Map<string, ExecutionProfile> = new Map();
     
     // Load profiles from each workspace folder
     for (const folder of workspaceFolders) {
@@ -97,15 +99,20 @@ export class ProfileManager {
         
         // Tag each profile with source workspace folder and handle conflicts
         for (const profile of profiles) {
-          // Track how many times we've seen this profile ID
-          const count = profileIdCounts.get(profile.id) || 0;
-          profileIdCounts.set(profile.id, count + 1);
+          const existing = seenProfileIds.get(profile.id);
           
-          // If this is a duplicate ID (count > 0), prefix with workspace folder name
-          let taggedProfile: ExecutionProfile;
-          if (count > 0) {
+          if (existing) {
+            // Duplicate ID — skip built-in duplicates silently since they're identical
+            if (profile.isBuiltIn) {
+              this.outputChannel.appendLine(
+                `[${new Date().toISOString()}] [ProfileManager] Skipping duplicate built-in profile "${profile.id}" from ${folder.name}`
+              );
+              continue;
+            }
+            
+            // Custom profile with conflicting ID — prefix with workspace folder name
             const folderName = folder.name;
-            taggedProfile = {
+            const taggedProfile: ExecutionProfile = {
               ...profile,
               id: `${folderName}-${profile.id}`,
               metadata: {
@@ -119,9 +126,12 @@ export class ProfileManager {
             this.outputChannel.appendLine(
               `[${new Date().toISOString()}] [ProfileManager] Profile ID conflict resolved: "${profile.id}" → "${taggedProfile.id}" (from ${folderName})`
             );
+            
+            allProfiles.push(taggedProfile);
+            seenProfileIds.set(taggedProfile.id, taggedProfile);
           } else {
-            // First occurrence, just tag with workspace folder
-            taggedProfile = {
+            // First occurrence, tag with workspace folder
+            const taggedProfile: ExecutionProfile = {
               ...profile,
               metadata: {
                 ...profile.metadata,
@@ -130,9 +140,10 @@ export class ProfileManager {
                 originalId: profile.id
               }
             };
+            
+            allProfiles.push(taggedProfile);
+            seenProfileIds.set(profile.id, taggedProfile);
           }
-          
-          allProfiles.push(taggedProfile);
         }
       } catch (error) {
         this.outputChannel.appendLine(
@@ -768,16 +779,37 @@ export class ProfileManager {
    */
   instantiateTemplate(profile: ExecutionProfile, spec: SpecFile, targetFile?: string): string {
     try {
+      const resolvedTargetFile = targetFile || 'tasks.md';
+
+      // Determine task counts for the target file
+      let totalTasks = spec.totalTasks;
+      let completedTasks = spec.completedTasks;
+
+      if (resolvedTargetFile === 'tasks.md') {
+        // Use tasks.md-specific stats if available, otherwise fall back to aggregated
+        if (spec.tasksFileStats) {
+          totalTasks = spec.tasksFileStats.totalTasks;
+          completedTasks = spec.tasksFileStats.completedTasks;
+        }
+      } else if (spec.extraFilesMetadata) {
+        // Look up the extra file's stats
+        const meta = spec.extraFilesMetadata.find(m => m.fileName === resolvedTargetFile);
+        if (meta && meta.isTaskLike) {
+          totalTasks = meta.totalTasks || 0;
+          completedTasks = meta.completedTasks || 0;
+        }
+      }
+
       // Build template variables
       const variables: TemplateVariables = {
         specName: this.escapeValue(spec.name),
         specPath: this.escapeValue(spec.path),
-        totalTasks: spec.totalTasks,
-        completedTasks: spec.completedTasks,
-        remainingTasks: spec.totalTasks - spec.completedTasks,
+        totalTasks,
+        completedTasks,
+        remainingTasks: totalTasks - completedTasks,
         workspaceFolder: this.escapeValue(spec.workspaceFolder || ''),
         specRelativePath: this.escapeValue(this.getRelativePath(spec)),
-        targetFile: targetFile || 'tasks.md'
+        targetFile: resolvedTargetFile
       };
       
       // Replace template variables

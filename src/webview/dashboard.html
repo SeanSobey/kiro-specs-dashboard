@@ -245,11 +245,11 @@
         }
 
         .spec-group-items .spec-group-header {
-            padding-left: calc(12px + var(--group-depth, 0) * 16px);
+            /* indentation handled via inline style */
         }
 
         .spec-group-items .spec-item {
-            padding-left: calc(12px + var(--group-depth, 0) * 16px);
+            /* indentation handled via inline style */
         }
 
         .group-summary-card {
@@ -2602,8 +2602,9 @@
             }
 
             // Create a group summary card
-            function createGroupSummaryCard(groupName, specs) {
+            function createGroupSummaryCard(groupName, specs, depth) {
                 if (specs.length <= 1) return '';
+                const summaryIndent = 12 + (depth || 0) * 16;
                 let total = 0, completed = 0, optional = 0;
                 let compReq = 0, compOpt = 0;
                 let done = 0, active = 0, todo = 0;
@@ -2627,7 +2628,7 @@
                 else badge = '<span class="spec-badge">TODO</span>';
 
                 return `
-                    <li class="spec-item group-summary-card">
+                    <li class="spec-item group-summary-card" style="padding-left: ${summaryIndent}px;">
                         <div class="spec-item-header">
                             <div class="spec-name">${escapeHtml(formatDisplayName(groupName))} — Summary</div>
                         </div>
@@ -2652,7 +2653,8 @@
             // Render a group tree node recursively
             function renderGroupNode(node, depth) {
                 let html = '';
-                html += node.specs.map(spec => createSpecListItem(spec)).join('');
+                const itemPadding = 12 + depth * 16;
+                html += node.specs.map(spec => createSpecListItem(spec, depth)).join('');
                 const sortedKeys = Array.from(node.children.keys()).sort();
                 for (const key of sortedKeys) {
                     const child = node.children.get(key);
@@ -2672,7 +2674,7 @@
                         </li>
                         <div class="spec-group-items ${isCollapsed ? 'collapsed' : ''}" 
                              data-group-items="${escapeHtml(fullPath)}">
-                            ${createGroupSummaryCard(key, collectSpecs(child))}
+                            ${createGroupSummaryCard(key, collectSpecs(child), depth + 1)}
                             ${renderGroupNode(child, depth + 1)}
                         </div>
                     `;
@@ -2735,7 +2737,7 @@
                         </li>
                         <div class="spec-group-items ${isCollapsed ? 'collapsed' : ''}" 
                              data-workspace-folder-items="${escapeHtml(folderDisplayName)}">
-                            ${renderGroupNode(folderGroupTree, 0)}
+                            ${renderGroupNode(folderGroupTree, 1)}
                             ${folderPaginationHTML}
                         </div>
                     `;
@@ -2829,7 +2831,9 @@
         }
         
         // Create a spec list item HTML
-        function createSpecListItem(spec) {
+        function createSpecListItem(spec, depth) {
+            const indentDepth = depth || 0;
+            const indentPx = 12 + indentDepth * 16;
             const displayName = formatDisplayName(spec.name);
             const progress = spec.progress || 0;
             const totalTasks = spec.totalTasks || 0;
@@ -2879,95 +2883,113 @@
             `;
 
             // Build extra task-like file breakdown rows
-            let extraFilesBreakdownHTML = '';
-            const allTaskLikeFiles = (spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
-            // Filter out hidden extra files based on visibility settings
-            const taskLikeFiles = allTaskLikeFiles.filter(m => {
+            // --- Config-driven file rendering ---
+            // Resolve display config for all files
+            const tasksConf = getFileDisplayConfig('tasks', 'standard-task');
+            const reqConf   = getFileDisplayConfig('requirements', 'standard-content');
+            const designConf = getFileDisplayConfig('design', 'standard-content');
+
+            // Visible extra files (task-like and content)
+            const allExtraMeta = spec.extraFilesMetadata || [];
+            const visibleExtraMeta = allExtraMeta.filter(m => {
                 const baseName = (m.fileName || '').replace(/\.md$/, '');
-                return currentSettings?.extraFileVisibility?.[baseName] !== false;
+                const conf = getFileDisplayConfig(baseName, m.isTaskLike ? 'extra-task' : 'extra-content');
+                return conf.visible;
             });
+            const taskLikeFiles = visibleExtraMeta.filter(m => m.isTaskLike);
 
-            // Build per-file status rows (tasks.md + each extra task-like file)
-            const hasExtraTaskFiles = taskLikeFiles.length > 0;
-            let perFileStatsHTML = '';
-            if (hasExtraTaskFiles) {
-                // tasks.md row
-                const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, optionalTasks: 0, completedRequired: 0, completedOptional: 0, progress: 0 };
-                let tBadge = '';
-                if (tfs.progress === 100) { tBadge = '<span class="spec-badge">DONE</span>'; }
-                else if (tfs.progress > 0) { tBadge = '<span class="spec-badge">ACTIVE</span>'; }
-                else { tBadge = '<span class="spec-badge">TODO</span>'; }
+            // Helper: render a task-like file stats row
+            function renderFileStats(fileName, label, icon, stats) {
+                const t = stats.totalTasks || 0;
+                const c = stats.completedTasks || 0;
+                const o = stats.optionalTasks || 0;
+                const cr = stats.completedRequired || 0;
+                const co = stats.completedOptional || 0;
+                const rt = t - o;
+                const pct = t > 0 ? Math.round((c / t) * 100) : 0;
+                const rPct = t > 0 ? Math.round((cr / t) * 100) : 0;
+                const oPct = t > 0 ? Math.round((co / t) * 100) : 0;
+                let badge = '';
+                if (pct === 100) badge = '<span class="spec-badge">DONE</span>';
+                else if (pct > 0) badge = '<span class="spec-badge">ACTIVE</span>';
+                else badge = '<span class="spec-badge">TODO</span>';
 
-                const tfsCompReq = tfs.completedRequired || 0;
-                const tfsCompOpt = tfs.completedOptional || 0;
-                const tfsReqTotal = (tfs.totalTasks || 0) - (tfs.optionalTasks || 0);
-                const tfsReqPct = (tfs.totalTasks || 0) > 0 ? Math.round((tfsCompReq / (tfs.totalTasks || 0)) * 100) : 0;
-                const tfsOptPct = (tfs.totalTasks || 0) > 0 ? Math.round((tfsCompOpt / (tfs.totalTasks || 0)) * 100) : 0;
+                const isClickable = fileName !== 'tasks.md';
+                const labelClass = isClickable ? 'file-stats-label extra-file-name' : 'file-stats-label';
+                const dataAttrs = isClickable
+                    ? `data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="${escapeHtml(fileName)}" title="Open ${escapeHtml(fileName)}"`
+                    : '';
 
-                perFileStatsHTML += `
+                return `
                     <div class="file-stats-row">
-                        <span class="file-stats-label"><span class="codicon codicon-list-unordered"></span> tasks</span>
+                        <span class="${labelClass}" ${dataAttrs}><span class="codicon codicon-${escapeHtml(icon)}"></span> ${escapeHtml(label)}</span>
                         <div class="file-stats-values">
-                            ${tBadge}
-                            <span>${tfs.progress}%</span>
-                            <span>${tfs.completedTasks}/${tfs.totalTasks} tasks</span>
-                            ${tfs.optionalTasks > 0 ? `<span>${tfs.optionalTasks} optional</span>` : ''}
+                            ${badge}
+                            <span>${pct}%</span>
+                            <span>${c}/${t} tasks</span>
+                            ${o > 0 ? `<span>${o} optional</span>` : ''}
                         </div>
                     </div>
                     <div class="file-progress-bar">
-                        <div class="file-progress-fill required" style="width: ${tfsReqPct}%"></div>
-                        ${(tfs.optionalTasks || 0) > 0 ? `<div class="file-progress-fill optional" style="width: ${tfsOptPct}%"></div>` : ''}
+                        <div class="file-progress-fill required" style="width: ${rPct}%"></div>
+                        ${o > 0 ? `<div class="file-progress-fill optional" style="width: ${oPct}%"></div>` : ''}
                     </div>
-                    <div class="progress-breakdown">${tfsCompReq}/${tfsReqTotal} required${(tfs.optionalTasks || 0) > 0 ? ` · ${tfsCompOpt}/${tfs.optionalTasks} optional` : ''}</div>`;
+                    <div class="progress-breakdown">${cr}/${rt} required${o > 0 ? ` · ${co}/${o} optional` : ''}</div>`;
+            }
 
-                // Extra file rows
+            // Build per-file stats panels
+            const hasExtraTaskFiles = taskLikeFiles.length > 0;
+            let perFileStatsHTML = '';
+            if (hasExtraTaskFiles) {
+                // tasks.md stats row (if showStats enabled)
+                if (tasksConf.visible && tasksConf.showStats) {
+                    const tfs = spec.tasksFileStats || { totalTasks: 0, completedTasks: 0, optionalTasks: 0, completedRequired: 0, completedOptional: 0, progress: 0 };
+                    perFileStatsHTML += renderFileStats('tasks.md', tasksConf.label, tasksConf.icon, tfs);
+                }
+
+                // Extra task-like file stats rows
                 taskLikeFiles.forEach(meta => {
-                    const fTotal = meta.totalTasks || 0;
-                    const fCompleted = meta.completedTasks || 0;
-                    const fOptional = meta.optionalTasks || 0;
-                    const fCompReq = meta.completedRequired || 0;
-                    const fCompOpt = meta.completedOptional || 0;
-                    const fReqTotal = fTotal - fOptional;
-                    const fPct = fTotal > 0 ? Math.round((fCompleted / fTotal) * 100) : 0;
-                    const fReqPct = fTotal > 0 ? Math.round((fCompReq / fTotal) * 100) : 0;
-                    const fOptPct = fTotal > 0 ? Math.round((fCompOpt / fTotal) * 100) : 0;
-                    const fLabel = getExtraFileLabel(meta.fileName, currentSettings);
-                    let fBadge = '';
-                    if (fPct === 100) { fBadge = '<span class="spec-badge">DONE</span>'; }
-                    else if (fPct > 0) { fBadge = '<span class="spec-badge">ACTIVE</span>'; }
-                    else { fBadge = '<span class="spec-badge">TODO</span>'; }
-
-                    perFileStatsHTML += `
-                        <div class="file-stats-row">
-                            <span class="file-stats-label extra-file-name" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}"><span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}</span>
-                            <div class="file-stats-values">
-                                ${fBadge}
-                                <span>${fPct}%</span>
-                                <span>${fCompleted}/${fTotal} tasks</span>
-                                ${fOptional > 0 ? `<span>${fOptional} optional</span>` : ''}
-                            </div>
-                        </div>
-                        <div class="file-progress-bar">
-                            <div class="file-progress-fill required" style="width: ${fReqPct}%"></div>
-                            ${fOptional > 0 ? `<div class="file-progress-fill optional" style="width: ${fOptPct}%"></div>` : ''}
-                        </div>
-                        <div class="progress-breakdown">${fCompReq}/${fReqTotal} required${fOptional > 0 ? ` · ${fCompOpt}/${fOptional} optional` : ''}</div>`;
+                    const baseName = (meta.fileName || '').replace(/\.md$/, '');
+                    const conf = getFileDisplayConfig(baseName, 'extra-task');
+                    if (conf.showStats) {
+                        perFileStatsHTML += renderFileStats(meta.fileName, conf.label, conf.icon, meta);
+                    }
                 });
             }
 
-            // Build extra file action buttons (task-like files get their own buttons)
-            let extraFileActionsHTML = '';
-            if (taskLikeFiles.length > 0) {
-                extraFileActionsHTML = taskLikeFiles.map(meta => {
-                    const fLabel = getExtraFileLabel(meta.fileName, currentSettings);
-                    return `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}">
-                            <span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}
-                        </button>`;
-                }).join('');
+            // Build action buttons
+            let actionButtonsHTML = '';
+
+            // Standard files: requirements, design, tasks
+            if (reqConf.visible && reqConf.showAction && spec.requirementsContent !== undefined) {
+                actionButtonsHTML += `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="requirements.md" title="Open requirements.md">
+                    <span class="codicon codicon-${escapeHtml(reqConf.icon)}"></span> ${escapeHtml(reqConf.label)}
+                </button>`;
+            }
+            if (designConf.visible && designConf.showAction && spec.designContent !== undefined) {
+                actionButtonsHTML += `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="design.md" title="Open design.md">
+                    <span class="codicon codicon-${escapeHtml(designConf.icon)}"></span> ${escapeHtml(designConf.label)}
+                </button>`;
+            }
+            if (tasksConf.visible && tasksConf.showAction) {
+                actionButtonsHTML += `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="tasks.md" title="Open tasks.md">
+                    <span class="codicon codicon-${escapeHtml(tasksConf.icon)}"></span> ${escapeHtml(tasksConf.label)}
+                </button>`;
             }
 
+            // Extra files with showAction
+            visibleExtraMeta.forEach(meta => {
+                const baseName = (meta.fileName || '').replace(/\.md$/, '');
+                const conf = getFileDisplayConfig(baseName, meta.isTaskLike ? 'extra-task' : 'extra-content');
+                if (conf.showAction) {
+                    actionButtonsHTML += `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}">
+                        <span class="codicon codicon-${escapeHtml(conf.icon)}"></span> ${escapeHtml(conf.label)}
+                    </button>`;
+                }
+            });
+
             return `
-                <li class="spec-item">
+                <li class="spec-item" style="padding-left: ${indentPx}px;">
                     <div class="spec-item-header">
                         <div class="spec-name">${escapeHtml(displayName)}</div>
                         ${executionControlsHTML}
@@ -2990,16 +3012,7 @@
                     <div class="progress-breakdown">${completedRequired}/${requiredTotal} required${optionalTasks > 0 ? ` · ${completedOptional}/${optionalTasks} optional` : ''}</div>
                     ${perFileStatsHTML}
                     <div class="spec-actions">
-                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="requirements.md" title="Open requirements.md">
-                            <span class="codicon codicon-file"></span> Requirements
-                        </button>
-                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="design.md" title="Open design.md">
-                            <span class="codicon codicon-edit"></span> Design
-                        </button>
-                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="tasks.md" title="Open tasks.md">
-                            <span class="codicon codicon-list-unordered"></span> Tasks
-                        </button>
-                        ${extraFileActionsHTML}
+                        ${actionButtonsHTML}
                         <div class="more-btn-wrapper" style="position: relative; display: inline-block;">
                             <button class="action-btn more-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" title="More files">
                                 <span class="codicon codicon-ellipsis"></span> More
@@ -3012,8 +3025,8 @@
         }
         
         // Create a spec card HTML (legacy - kept for compatibility)
-        function createSpecCard(spec) {
-            return createSpecListItem(spec);
+        function createSpecCard(spec, depth) {
+            return createSpecListItem(spec, depth);
         }
         
         // Create pagination controls HTML
@@ -3241,13 +3254,15 @@
             // Extra files from the spec
             const spec = findSpec(specName, workspaceFolder);
             if (spec && spec.extraFiles && spec.extraFiles.length > 0) {
-                // Filter to only non-task-like files (task-like ones have their own UI)
+                // Filter to files that aren't already shown as action buttons
                 const nonTaskFiles = spec.extraFiles.filter(fileName => {
                     const meta = spec.extraFilesMetadata && spec.extraFilesMetadata.find(m => m.fileName === fileName);
-                    if (meta && meta.isTaskLike) return false;
-                    // Apply visibility filtering
                     const baseName = fileName.replace(/\.md$/, '');
-                    if (currentSettings?.extraFileVisibility?.[baseName] === false) return false;
+                    const kind = (meta && meta.isTaskLike) ? 'extra-task' : 'extra-content';
+                    const conf = getFileDisplayConfig(baseName, kind);
+                    // Hide if not visible, or if already shown as an action button
+                    if (!conf.visible) return false;
+                    if (conf.showAction) return false;
                     return true;
                 });
 
@@ -3302,10 +3317,11 @@
             // Build per-file execution sections
             const spec = findSpec(specId, workspaceFolder);
             const allTaskLikeMeta = (spec && spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
-            // Filter out hidden extra files based on visibility settings
+            // Filter out hidden extra files based on config
             const taskLikeMeta = allTaskLikeMeta.filter(m => {
                 const baseName = (m.fileName || '').replace(/\.md$/, '');
-                return currentSettings?.extraFileVisibility?.[baseName] !== false;
+                const conf = getFileDisplayConfig(baseName, 'extra-task');
+                return conf.visible;
             });
 
             // Helper to create a file section with profiles
@@ -3488,11 +3504,60 @@
         // Resolve extra file display label: use configured label if available, otherwise hyphen-to-title-case
         function getExtraFileLabel(fileName, settings) {
             const baseName = fileName.replace(/\.md$/, '');
+            // Check specFileConfig first, then legacy extraFileLabels
+            if (settings?.specFileConfig?.[baseName]?.label) {
+                return settings.specFileConfig[baseName].label;
+            }
             if (settings?.extraFileLabels?.[baseName]) {
                 return settings.extraFileLabels[baseName];
             }
             // Default: hyphen-to-title-case
             return baseName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+
+        /**
+         * Resolve the effective display config for a spec file.
+         * Merges specFileConfig with defaults. When specFileConfig is empty (default),
+         * everything shows — matching current behaviour.
+         *
+         * @param {string} baseName - file name without .md (e.g. 'tasks', 'requirements', 'test-cases')
+         * @param {string} kind - 'standard-content' | 'standard-task' | 'extra-task' | 'extra-content'
+         * @returns {{ visible: boolean, showStats: boolean, showAction: boolean, icon: string, label: string }}
+         */
+        function getFileDisplayConfig(baseName, kind) {
+            const sfc = currentSettings?.specFileConfig || {};
+            const hasAnyConfig = Object.keys(sfc).length > 0;
+            const conf = sfc[baseName] || {};
+
+            // Defaults per kind
+            const defaults = {
+                'standard-content': { showStats: false, showAction: true, icon: 'file' },
+                'standard-task':    { showStats: true,  showAction: true, icon: 'list-unordered' },
+                'extra-task':       { showStats: true,  showAction: true, icon: 'checklist' },
+                'extra-content':    { showStats: false, showAction: false, icon: 'markdown' },
+            }[kind] || { showStats: false, showAction: false, icon: 'file' };
+
+            // When specFileConfig is empty, show everything with defaults
+            // When specFileConfig has entries, only files listed are shown (unless visible is explicitly set)
+            let visible = true;
+            if (conf.visible === false) {
+                visible = false;
+            } else if (hasAnyConfig && !(baseName in sfc)) {
+                // File not listed in config — still visible by default
+                visible = true;
+            }
+            // Also check legacy extraFileVisibility
+            if (currentSettings?.extraFileVisibility?.[baseName] === false) {
+                visible = false;
+            }
+
+            return {
+                visible,
+                showStats:  conf.showStats  !== undefined ? conf.showStats  : defaults.showStats,
+                showAction: conf.showAction !== undefined ? conf.showAction : defaults.showAction,
+                icon:       conf.icon       || defaults.icon,
+                label:      getExtraFileLabel(baseName + '.md', currentSettings),
+            };
         }
         
         /**

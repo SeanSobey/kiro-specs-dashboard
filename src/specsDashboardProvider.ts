@@ -281,6 +281,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       const config = vscode.workspace.getConfiguration('kiroSpecsDashboard');
       const extraFileLabels = config.get<Record<string, string>>('extraFileLabels') ?? {};
       const extraFileVisibility = config.get<Record<string, boolean>>('extraFileVisibility') ?? {};
+      const specFileConfig = config.get<Record<string, { label?: string; visible?: boolean; showStats?: boolean; showAction?: boolean; icon?: string }>>('specFileConfig') ?? {};
 
       // Filter hidden extra files from aggregated task counts (Requirement 2.7)
       for (const spec of this.specs) {
@@ -296,8 +297,9 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
           for (const meta of spec.extraFilesMetadata) {
             if (meta.isTaskLike) {
               const baseName = meta.fileName.replace(/\.md$/, '');
-              // Skip hidden extra files from aggregation
-              if (extraFileVisibility[baseName] === false) {
+              // Skip hidden extra files from aggregation (check both old and new config)
+              const fileConf = specFileConfig[baseName];
+              if (extraFileVisibility[baseName] === false || fileConf?.visible === false) {
                 continue;
               }
               aggregatedTotal += meta.totalTasks!;
@@ -335,7 +337,8 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
           state: dashboardState,
           settings: {
             extraFileLabels,
-            extraFileVisibility
+            extraFileVisibility,
+            specFileConfig
           }
         });
         this.outputChannel.appendLine(`[${new Date().toISOString()}] Sent updated specs and state to webview`);
@@ -776,14 +779,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      // Get first workspace folder
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      if (!workspaceFolder) {
-        this.sendError('No workspace folder open');
-        return;
-      }
-
-      const profiles = await this.profileManager.loadProfiles(workspaceFolder);
+      const profiles = await this.profileManager.loadAllProfiles();
       this.sendProfilesUpdated(profiles);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1178,11 +1174,13 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       if (spec.extraFilesMetadata) {
         const config = vscode.workspace.getConfiguration('kiroSpecsDashboard');
         const extraFileVisibility = config.get<Record<string, boolean>>('extraFileVisibility') ?? {};
+        const specFileConfig = config.get<Record<string, { visible?: boolean }>>('specFileConfig') ?? {};
 
         for (const meta of spec.extraFilesMetadata) {
           if (meta.isTaskLike) {
             const baseName = meta.fileName.replace(/\.md$/, '');
-            if (extraFileVisibility[baseName] === false) {
+            const fileConf = specFileConfig[baseName];
+            if (extraFileVisibility[baseName] === false || fileConf?.visible === false) {
               continue;
             }
             aggregatedTotal += meta.totalTasks!;
