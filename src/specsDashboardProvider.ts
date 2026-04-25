@@ -268,8 +268,8 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    */
   private async loadSpecs(): Promise<void> {
     try {
-      // Store previous specs for comparison
-      const previousSpecs = new Map(this.specs.map(spec => [spec.name, spec]));
+      // Store previous specs for comparison (use name+workspaceFolder as key for uniqueness)
+      const previousSpecs = new Map(this.specs.map(spec => [`${spec.workspaceFolder || ''}::${spec.name}`, spec]));
       
       const previousCount = this.specs.length;
       this.specs = await this.scanner.scanWorkspace(this.specDirectories);
@@ -559,7 +559,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: Invalid executeSpec message parameters`);
             return;
           }
-          await this.handleExecuteSpec(message.specId, message.profileId, message.targetFile);
+          await this.handleExecuteSpec(message.specId, message.profileId, message.targetFile, message.workspaceFolder);
           break;
         
         case 'cancelExecution':
@@ -797,22 +797,30 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    * 
    * Requirements: 4.1, 4.2
    */
-  private async handleExecuteSpec(specId: string, profileId: string, targetFile?: string): Promise<void> {
+  private async handleExecuteSpec(specId: string, profileId: string, targetFile?: string, specWorkspaceFolder?: string): Promise<void> {
     if (!this.executionManager || !this.executionHistory) {
       this.sendError('Execution manager not initialized');
       return;
     }
 
     try {
-      // Find the spec
-      const spec = this.specs.find(s => s.name === specId);
+      // Find the spec (workspace-aware to handle duplicate names across workspaces)
+      const spec = specWorkspaceFolder
+        ? this.specs.find(s => s.name === specId && s.workspaceFolder === specWorkspaceFolder)
+        : this.specs.find(s => s.name === specId);
       if (!spec) {
         this.sendError(`Spec "${specId}" not found`);
         return;
       }
 
-      // Get workspace folder
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      // Get workspace folder - prefer the spec's own workspace folder
+      let workspaceFolder: vscode.WorkspaceFolder | undefined;
+      if (spec.workspaceFolder) {
+        workspaceFolder = vscode.workspace.workspaceFolders?.find(f => f.name === spec.workspaceFolder);
+      }
+      if (!workspaceFolder) {
+        workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      }
       if (!workspaceFolder) {
         this.sendError('No workspace folder open');
         return;
@@ -1149,14 +1157,8 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
       // Recalculate progress and update internal state (Requirements: 8.4, 8.5)
       const taskStats = this.recalculateTaskStats(updatedContent);
       spec.tasksContent = updatedContent;
-      spec.totalTasks = taskStats.totalTasks;
-      spec.completedTasks = taskStats.completedTasks;
-      spec.optionalTasks = taskStats.optionalTasks;
-      spec.completedRequired = taskStats.completedRequired;
-      spec.completedOptional = taskStats.completedOptional;
-      spec.progress = taskStats.progress;
 
-      // Update tasksFileStats as well (Requirements: 4.8)
+      // Update tasksFileStats first (Requirements: 4.8)
       if (spec.tasksFileStats) {
         spec.tasksFileStats.totalTasks = taskStats.totalTasks;
         spec.tasksFileStats.completedTasks = taskStats.completedTasks;
@@ -1165,6 +1167,41 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
         spec.tasksFileStats.completedOptional = taskStats.completedOptional;
         spec.tasksFileStats.progress = taskStats.progress;
       }
+
+      // Re-aggregate with extra files to get correct totals
+      let aggregatedTotal = taskStats.totalTasks;
+      let aggregatedCompleted = taskStats.completedTasks;
+      let aggregatedOptional = taskStats.optionalTasks;
+      let aggregatedCompletedRequired = taskStats.completedRequired;
+      let aggregatedCompletedOptional = taskStats.completedOptional;
+
+      if (spec.extraFilesMetadata) {
+        const config = vscode.workspace.getConfiguration('kiroSpecsDashboard');
+        const extraFileVisibility = config.get<Record<string, boolean>>('extraFileVisibility') ?? {};
+
+        for (const meta of spec.extraFilesMetadata) {
+          if (meta.isTaskLike) {
+            const baseName = meta.fileName.replace(/\.md$/, '');
+            if (extraFileVisibility[baseName] === false) {
+              continue;
+            }
+            aggregatedTotal += meta.totalTasks!;
+            aggregatedCompleted += meta.completedTasks!;
+            aggregatedOptional += meta.optionalTasks!;
+            aggregatedCompletedRequired += meta.completedRequired ?? 0;
+            aggregatedCompletedOptional += meta.completedOptional ?? 0;
+          }
+        }
+      }
+
+      spec.totalTasks = aggregatedTotal;
+      spec.completedTasks = aggregatedCompleted;
+      spec.optionalTasks = aggregatedOptional;
+      spec.completedRequired = aggregatedCompletedRequired;
+      spec.completedOptional = aggregatedCompletedOptional;
+      spec.progress = aggregatedTotal > 0
+        ? Math.round((aggregatedCompleted / aggregatedTotal) * 100)
+        : 0;
       
       // Record task completion in velocity tracker (Requirements: 19.2, 19.6)
       // Only record when task is marked as completed (not when uncompleted)
@@ -1422,7 +1459,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
     currentSpecs: SpecFile[]
   ): Promise<void> {
     for (const currentSpec of currentSpecs) {
-      const previousSpec = previousSpecs.get(currentSpec.name);
+      const previousSpec = previousSpecs.get(`${currentSpec.workspaceFolder || ''}::${currentSpec.name}`);
       
       // Skip if this is a new spec (no previous state to compare)
       if (!previousSpec || !previousSpec.tasksContent || !currentSpec.tasksContent) {

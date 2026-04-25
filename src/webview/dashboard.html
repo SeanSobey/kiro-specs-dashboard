@@ -2308,11 +2308,24 @@
                 case 'specUpdated':
                     // Update a single spec's data and re-render to reflect new progress segments (Requirement 4.8)
                     if (message.spec) {
-                        const idx = allSpecs.findIndex(s => s.name === message.spec.name);
+                        const idx = allSpecs.findIndex(s => s.name === message.spec.name && s.workspaceFolder === message.spec.workspaceFolder);
                         if (idx !== -1) {
                             allSpecs[idx] = message.spec;
                         }
-                        applyFilters();
+                        // Re-filter and re-render without resetting pagination
+                        filteredSpecs = allSpecs.filter(spec => {
+                            if (currentState.filterMode === 'in-progress' && (spec.progress === 0 || spec.progress === 100)) return false;
+                            if (currentState.filterMode === 'completed' && spec.progress !== 100) return false;
+                            if (currentState.filterMode === 'pending' && spec.progress !== 0) return false;
+                            if (currentState.searchQuery) {
+                                const query = currentState.searchQuery.toLowerCase();
+                                const displayName = formatDisplayName(spec.name).toLowerCase();
+                                const groupName = (spec.group || '').toLowerCase();
+                                return displayName.includes(query) || spec.name.toLowerCase().includes(query) || groupName.includes(query);
+                            }
+                            return true;
+                        });
+                        displayPage(currentState.currentPage);
                     }
                     break;
                 case 'executionHistoryUpdated':
@@ -2856,7 +2869,7 @@
             const executionControlsHTML = `
                 <div class="execution-controls">
                     <div class="execution-btn-wrapper">
-                        <button class="execution-btn" data-spec-id="${escapeHtml(spec.name)}" title="Execute spec with profile">
+                        <button class="execution-btn" data-spec-id="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" title="Execute spec with profile">
                             <span class="codicon codicon-play"></span>
                             Execute
                             <span class="codicon codicon-chevron-down"></span>
@@ -2926,7 +2939,7 @@
 
                     perFileStatsHTML += `
                         <div class="file-stats-row">
-                            <span class="file-stats-label extra-file-name" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}"><span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}</span>
+                            <span class="file-stats-label extra-file-name" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}"><span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}</span>
                             <div class="file-stats-values">
                                 ${fBadge}
                                 <span>${fPct}%</span>
@@ -2947,7 +2960,7 @@
             if (taskLikeFiles.length > 0) {
                 extraFileActionsHTML = taskLikeFiles.map(meta => {
                     const fLabel = getExtraFileLabel(meta.fileName, currentSettings);
-                    return `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}">
+                    return `<button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="${escapeHtml(meta.fileName)}" title="Open ${escapeHtml(meta.fileName)}">
                             <span class="codicon codicon-checklist"></span> ${escapeHtml(fLabel)}
                         </button>`;
                 }).join('');
@@ -2977,18 +2990,18 @@
                     <div class="progress-breakdown">${completedRequired}/${requiredTotal} required${optionalTasks > 0 ? ` · ${completedOptional}/${optionalTasks} optional` : ''}</div>
                     ${perFileStatsHTML}
                     <div class="spec-actions">
-                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="requirements.md" title="Open requirements.md">
+                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="requirements.md" title="Open requirements.md">
                             <span class="codicon codicon-file"></span> Requirements
                         </button>
-                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="design.md" title="Open design.md">
+                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="design.md" title="Open design.md">
                             <span class="codicon codicon-edit"></span> Design
                         </button>
-                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-file="tasks.md" title="Open tasks.md">
+                        <button class="action-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" data-file="tasks.md" title="Open tasks.md">
                             <span class="codicon codicon-list-unordered"></span> Tasks
                         </button>
                         ${extraFileActionsHTML}
                         <div class="more-btn-wrapper" style="position: relative; display: inline-block;">
-                            <button class="action-btn more-btn" data-spec="${escapeHtml(spec.name)}" title="More files">
+                            <button class="action-btn more-btn" data-spec="${escapeHtml(spec.name)}" data-workspace="${escapeHtml(spec.workspaceFolder || '')}" title="More files">
                                 <span class="codicon codicon-ellipsis"></span> More
                                 <span class="codicon codicon-chevron-down" style="font-size: 10px; margin-left: 2px;"></span>
                             </button>
@@ -3086,12 +3099,12 @@
         }
         
         // Open a specific spec file in the editor
-        function openSpecFile(specName, fileName) {
+        function openSpecFile(specName, fileName, workspaceFolder) {
             //console.log('openSpecFile called:', specName, fileName);
             //console.log('All specs:', allSpecs);
             
-            // Find the spec to get its path
-            const spec = allSpecs.find(s => s.name === specName);
+            // Find the spec to get its path (workspace-aware)
+            const spec = findSpec(specName, workspaceFolder);
             //console.log('Found spec:', spec);
             
             if (!spec) {
@@ -3125,9 +3138,10 @@
                     e.stopPropagation();
                     const specName = this.getAttribute('data-spec');
                     const fileName = this.getAttribute('data-file');
+                    const workspace = this.getAttribute('data-workspace') || undefined;
                     
                     if (specName && fileName) {
-                        openSpecFile(specName, fileName);
+                        openSpecFile(specName, fileName, workspace);
                     }
                 });
             });
@@ -3138,8 +3152,9 @@
                 button.addEventListener('click', function(e) {
                     e.stopPropagation();
                     const specName = this.getAttribute('data-spec');
+                    const workspace = this.getAttribute('data-workspace') || undefined;
                     if (specName) {
-                        showMoreDropdown(this, specName);
+                        showMoreDropdown(this, specName, workspace);
                     }
                 });
             });
@@ -3150,7 +3165,8 @@
                 button.addEventListener('click', function(e) {
                     e.stopPropagation();
                     const specId = this.getAttribute('data-spec-id');
-                    showProfileDropdown(this, specId);
+                    const workspace = this.getAttribute('data-workspace') || undefined;
+                    showProfileDropdown(this, specId, workspace);
                 });
             });
 
@@ -3170,9 +3186,11 @@
                 item.addEventListener('click', function(e) {
                     // Only trigger if clicking on the item itself, not on buttons
                     // Buttons already have stopPropagation, so this won't trigger for them
-                    const specName = this.querySelector('[data-spec]')?.getAttribute('data-spec');
+                    const btn = this.querySelector('[data-spec]');
+                    const specName = btn?.getAttribute('data-spec');
+                    const workspace = btn?.getAttribute('data-workspace') || undefined;
                     if (specName) {
-                        openSpecFile(specName, 'requirements.md');
+                        openSpecFile(specName, 'requirements.md', workspace);
                     }
                 });
             });
@@ -3184,15 +3202,16 @@
                     e.stopPropagation();
                     const specName = this.getAttribute('data-spec');
                     const fileName = this.getAttribute('data-file');
+                    const workspace = this.getAttribute('data-workspace') || undefined;
                     if (specName && fileName) {
-                        openSpecFile(specName, fileName);
+                        openSpecFile(specName, fileName, workspace);
                     }
                 });
             });
         }
         
         // Show More dropdown for extra files and notes
-        function showMoreDropdown(button, specName) {
+        function showMoreDropdown(button, specName, workspaceFolder) {
             const wrapper = button.parentElement;
             const existingDropdown = wrapper.querySelector('.more-dropdown');
 
@@ -3220,7 +3239,7 @@
             dropdown.appendChild(notesItem);
 
             // Extra files from the spec
-            const spec = allSpecs.find(s => s.name === specName);
+            const spec = findSpec(specName, workspaceFolder);
             if (spec && spec.extraFiles && spec.extraFiles.length > 0) {
                 // Filter to only non-task-like files (task-like ones have their own UI)
                 const nonTaskFiles = spec.extraFiles.filter(fileName => {
@@ -3245,7 +3264,7 @@
 
                         item.addEventListener('click', function(e) {
                             e.stopPropagation();
-                            openSpecFile(specName, fileName);
+                            openSpecFile(specName, fileName, workspaceFolder);
                             dropdown.remove();
                         });
                         dropdown.appendChild(item);
@@ -3257,7 +3276,7 @@
         }
 
         // Show profile dropdown for execution
-        function showProfileDropdown(button, specId) {
+        function showProfileDropdown(button, specId, workspaceFolder) {
             const wrapper = button.parentElement;
             const existingDropdown = wrapper.querySelector('.execution-dropdown');
             
@@ -3281,7 +3300,7 @@
             dropdown.id = 'profile-dropdown';
 
             // Build per-file execution sections
-            const spec = allSpecs.find(s => s.name === specId);
+            const spec = findSpec(specId, workspaceFolder);
             const allTaskLikeMeta = (spec && spec.extraFilesMetadata || []).filter(m => m.isTaskLike);
             // Filter out hidden extra files based on visibility settings
             const taskLikeMeta = allTaskLikeMeta.filter(m => {
@@ -3305,7 +3324,7 @@
                     `;
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        executeSpec(specId, profile.id, fileName);
+                        executeSpec(specId, profile.id, fileName, workspaceFolder);
                         closeAllDropdowns();
                     });
                     dropdown.appendChild(item);
@@ -3333,7 +3352,7 @@
                     `;
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        executeSpec(specId, profile.id);
+                        executeSpec(specId, profile.id, undefined, workspaceFolder);
                         closeAllDropdowns();
                     });
                     dropdown.appendChild(item);
@@ -3356,7 +3375,7 @@
         }
 
         // Execute a spec with a profile
-        function executeSpec(specId, profileId, targetFile) {
+        function executeSpec(specId, profileId, targetFile, workspaceFolder) {
             //console.log('Executing spec:', specId, 'with profile:', profileId, 'targetFile:', targetFile);
             
             const msg = {
@@ -3366,6 +3385,9 @@
             };
             if (targetFile) {
                 msg.targetFile = targetFile;
+            }
+            if (workspaceFolder !== undefined && workspaceFolder !== null) {
+                msg.workspaceFolder = workspaceFolder;
             }
             vscode.postMessage(msg);
         }
@@ -3413,7 +3435,7 @@
         
         // Show detail view with specific tab
         function showDetailView(specName, tabName = 'requirements') {
-            const spec = allSpecs.find(s => s.name === specName);
+            const spec = findSpec(specName);
             if (!spec) return;
             
             const detailView = document.getElementById('detailView');
@@ -3448,6 +3470,19 @@
             return name.split('-').map(word => 
                 word.charAt(0).toUpperCase() + word.slice(1)
             ).join(' ');
+        }
+
+        // Create a unique key for a spec using name + workspaceFolder
+        function specKey(spec) {
+            return (spec.workspaceFolder || '') + '::' + spec.name;
+        }
+
+        // Find a spec by name and optional workspaceFolder
+        function findSpec(specName, workspaceFolder) {
+            if (workspaceFolder !== undefined && workspaceFolder !== null) {
+                return allSpecs.find(s => s.name === specName && s.workspaceFolder === workspaceFolder);
+            }
+            return allSpecs.find(s => s.name === specName);
         }
 
         // Resolve extra file display label: use configured label if available, otherwise hyphen-to-title-case
