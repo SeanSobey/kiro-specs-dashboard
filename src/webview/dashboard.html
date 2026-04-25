@@ -2595,10 +2595,12 @@
             }
 
             // Helper to reconstruct the full group path for collapse tracking
+            let currentFolderPrefix = '';
             const groupPathStack = [];
             function getGroupFullPath(parentNode, key, depth) {
                 groupPathStack[depth] = key;
-                return groupPathStack.slice(0, depth + 1).join('/');
+                const path = groupPathStack.slice(0, depth + 1).join('/');
+                return currentFolderPrefix ? currentFolderPrefix + '::' + path : path;
             }
 
             // Create a group summary card
@@ -2728,6 +2730,9 @@
                         }
                     }
 
+                    // Scope group collapse tracking to this workspace folder
+                    currentFolderPrefix = folderDisplayName;
+
                     listHTML += `
                         <li class="spec-group-header ${isCollapsed ? 'collapsed' : ''}" 
                             data-workspace-folder="${escapeHtml(folderDisplayName)}">
@@ -2742,11 +2747,13 @@
                         </div>
                     `;
                 }
+                currentFolderPrefix = '';
                 
                 // pageSpecs not used for rendering in multi-folder mode, but set for compatibility
                 pageSpecs = filteredSpecs;
             } else {
                 // Single folder: use global pagination as before
+                currentFolderPrefix = '';
                 if (currentState.itemsPerPage === 'all') {
                     pageSpecs = filteredSpecs;
                     paginationContainer.innerHTML = '';
