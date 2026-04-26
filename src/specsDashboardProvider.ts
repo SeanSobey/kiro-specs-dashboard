@@ -23,6 +23,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
   private executionHistory?: ExecutionHistory;
   private profilesPanelManager?: any; // ProfilesPanelManager
   private historyPanelManager?: any; // HistoryPanelManager
+  private specDetailPanelManager?: any; // SpecDetailPanelManager
   private specs: SpecFile[] = [];
   private outputChannel: vscode.OutputChannel;
   private isWebviewVisible: boolean = false;
@@ -82,6 +83,13 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    */
   setHistoryPanelManager(historyPanelManager: any): void {
     this.historyPanelManager = historyPanelManager;
+  }
+
+  /**
+   * Set spec detail panel manager after construction
+   */
+  setSpecDetailPanelManager(specDetailPanelManager: any): void {
+    this.specDetailPanelManager = specDetailPanelManager;
   }
 
   /**
@@ -471,6 +479,20 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
           } else {
             this.outputChannel.appendLine(`[${new Date().toISOString()}] WARNING: HistoryPanelManager not initialized`);
             vscode.window.showWarningMessage('History panel manager is not available');
+          }
+          break;
+        
+        case 'openSpecDetail':
+          // Open the spec detail panel
+          if (typeof message.specName === 'string') {
+            this.outputChannel.appendLine(`[${new Date().toISOString()}] openSpecDetail: specName="${message.specName}", workspaceFolder="${message.workspaceFolder}", total specs=${this.specs.length}`);
+            const specToOpen = message.workspaceFolder
+              ? this.specs.find(s => s.name === message.specName && s.workspaceFolder === message.workspaceFolder)
+              : this.specs.find(s => s.name === message.specName);
+            this.outputChannel.appendLine(`[${new Date().toISOString()}] openSpecDetail: found=${!!specToOpen}, hasTasksContent=${!!specToOpen?.tasksContent}, hasDetailManager=${!!this.specDetailPanelManager}`);
+            if (specToOpen && this.specDetailPanelManager) {
+              this.specDetailPanelManager.openSpecDetail(specToOpen);
+            }
           }
           break;
         
@@ -3093,7 +3115,7 @@ export class SpecsDashboardProvider implements vscode.WebviewViewProvider {
    * 
    * @returns Array of specs
    */
-  getSpecs(): Array<{ totalTasks: number; completedTasks: number }> {
+  getSpecs(): SpecFile[] {
     return this.specs;
   }
 

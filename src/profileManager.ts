@@ -907,6 +907,7 @@ export class ProfileManager {
       '//   - createdAt: ISO 8601 timestamp of creation',
       '//   - updatedAt: ISO 8601 timestamp of last update',
       '//   - description: (optional) Description of the profile',
+      '//   - targetFiles: (optional) Array of file names this profile applies to (e.g., ["tasks.md"]). Omit for all files.',
       '//   - metadata: (optional) Custom metadata object',
       '//',
       '// Built-in Profiles:',

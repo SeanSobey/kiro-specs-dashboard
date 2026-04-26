@@ -227,10 +227,42 @@ This extension provides the following commands:
 
 This extension contributes the following settings:
 
-- **kiroSpecsDashboard.autoImportGitData** (default: `true`) - Automatically import velocity data from Git history on first activation
-  - When enabled, the extension will analyze Git commit history and import task completion data automatically
-  - Only imports if no velocity data exists yet
-  - Can be disabled if you prefer to manually import data using the "Import Data from Git" command
+- **kiroSpecsDashboard.autoImportGitData** (default: `true`) — Automatically import velocity data from Git history on first activation. When enabled, the extension analyses Git commit history and imports task completion data automatically. Only imports if no velocity data exists yet. Disable if you prefer to manually import using the "Import Data from Git" command.
+
+- **kiroSpecsDashboard.specDirectories** (default: `[".kiro/specs"]`) — Directories to scan for spec files, relative to each workspace folder root. Supports multiple directories.
+
+- **kiroSpecsDashboard.extraFileLabels** (default: `{}`) — Custom display labels for extra markdown files. Keys are file names without the `.md` extension, values are display labels. Superseded by `specFileConfig.label` when both are set.
+
+- **kiroSpecsDashboard.extraFileVisibility** (default: `{}`) — Control visibility of extra markdown files. Keys are file names without the `.md` extension, values are booleans. Superseded by `specFileConfig.visible` when both are set.
+
+- **kiroSpecsDashboard.specFileConfig** (default: `{}`) — Per-file display configuration for spec panels. Controls which files appear as stats panels (with progress bars), which appear as action buttons, and which are hidden. An empty object (the default) shows everything with sensible defaults — matching the current behaviour.
+
+  Keys are file base names without `.md` (e.g. `tasks`, `test-cases`, `requirements`, `design`). Values are objects with these optional properties:
+
+  | Property | Type | Default | Description |
+  |---|---|---|---|
+  | `label` | string | Title-cased file name | Custom display label |
+  | `visible` | boolean | `true` | Set `false` to hide the file completely (stats, buttons, and aggregation) |
+  | `showStats` | boolean | `true` for task-like files | Show the task progress panel (progress bar, badge, counts) |
+  | `showAction` | boolean | `true` for standard + task-like files | Show as an action button at the bottom of the spec card |
+  | `icon` | string | Varies by type | VSCode [codicon](https://microsoft.github.io/vscode-codicons/dist/codicon.html) name |
+
+  **Example** — show tasks and test-cases with stats, hide acceptance-criteria entirely:
+
+  ```json
+  {
+    "kiroSpecsDashboard.specFileConfig": {
+      "tasks": { "showStats": true, "showAction": true },
+      "test-cases": { "label": "Tests", "showStats": true, "showAction": true, "icon": "beaker" },
+      "requirements": { "showAction": true },
+      "design": { "showAction": true, "icon": "edit" },
+      "acceptance-criteria": { "visible": false }
+    }
+  }
+  ```
+
+  **Default behaviour** (empty config): `requirements`, `design`, and `tasks` get action buttons. Task-like extra files (those containing checkboxes) get both stats panels and action buttons. Non-task extra files appear in the "More" dropdown.
+
 - Dashboard state (filter mode, search query, pagination) is automatically saved per workspace
 
 ## Known Issues

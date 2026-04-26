@@ -3200,7 +3200,7 @@
                 });
             });
 
-            // Attach spec item click listeners to open requirements.md
+            // Attach spec item click listeners to open spec detail panel
             const specItems = document.querySelectorAll('.spec-item');
             specItems.forEach(item => {
                 item.addEventListener('click', function(e) {
@@ -3210,7 +3210,11 @@
                     const specName = btn?.getAttribute('data-spec');
                     const workspace = btn?.getAttribute('data-workspace') || undefined;
                     if (specName) {
-                        openSpecFile(specName, 'requirements.md', workspace);
+                        vscode.postMessage({
+                            type: 'openSpecDetail',
+                            specName: specName,
+                            workspaceFolder: workspace
+                        });
                     }
                 });
             });
@@ -3331,14 +3335,24 @@
                 return conf.visible;
             });
 
-            // Helper to create a file section with profiles
+            // Helper: check if a profile applies to a given file
+            function profileMatchesFile(profile, fileName) {
+                // No targetFiles or empty array = applies to all files
+                if (!profile.targetFiles || profile.targetFiles.length === 0) return true;
+                return profile.targetFiles.includes(fileName);
+            }
+
+            // Helper to create a file section with matching profiles
             function addFileSection(label, icon, fileName, stats) {
+                const matchingProfiles = executionProfiles.filter(p => profileMatchesFile(p, fileName));
+                if (matchingProfiles.length === 0) return;
+
                 const header = document.createElement('div');
                 header.className = 'execution-dropdown-file-header';
                 header.innerHTML = `<span class="codicon codicon-${escapeHtml(icon)}"></span> ${escapeHtml(label)} <span class="extra-file-progress">${stats.completed}/${stats.total}</span>`;
                 dropdown.appendChild(header);
 
-                executionProfiles.forEach(profile => {
+                matchingProfiles.forEach(profile => {
                     const item = document.createElement('div');
                     item.className = 'execution-dropdown-item execution-dropdown-file-item';
                     item.innerHTML = `
@@ -3365,8 +3379,9 @@
                     addFileSection(fLabel, 'checklist', meta.fileName, { completed: meta.completedTasks || 0, total: meta.totalTasks || 0 });
                 });
             } else {
-                // No extra files — just show profiles for the whole spec
-                executionProfiles.forEach(profile => {
+                // No extra files — just show profiles that match tasks.md or have no restriction
+                const matchingProfiles = executionProfiles.filter(p => profileMatchesFile(p, 'tasks.md'));
+                matchingProfiles.forEach(profile => {
                     const item = document.createElement('div');
                     item.className = 'execution-dropdown-item';
                     item.innerHTML = `

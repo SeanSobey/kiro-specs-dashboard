@@ -7,6 +7,7 @@ import { ExecutionManager } from './executionManager';
 import { ExecutionHistory } from './executionHistory';
 import { ProfilesPanelManager } from './profilesPanelManager';
 import { HistoryPanelManager } from './historyPanelManager';
+import { SpecDetailPanelManager } from './specDetailPanelManager';
 
 /**
  * Extension activation function
@@ -48,10 +49,15 @@ export function activate(context: vscode.ExtensionContext): void {
     executionHistory,
     executionOutputChannel
   );
+  const specDetailPanelManager = new SpecDetailPanelManager(
+    context,
+    executionOutputChannel
+  );
 
   // Add panel managers to subscriptions for disposal
   // Requirements: 7.4
   context.subscriptions.push(profilesPanelManager, historyPanelManager);
+  context.subscriptions.push(new vscode.Disposable(() => specDetailPanelManager.dispose()));
 
   // Inject managers into provider
   provider.setExecutionManagers(profileManager, executionManager, executionHistory);
@@ -60,6 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Requirements: 7.3
   provider.setProfilesPanelManager(profilesPanelManager);
   provider.setHistoryPanelManager(historyPanelManager);
+  provider.setSpecDetailPanelManager(specDetailPanelManager);
 
   // Wire up execution state change callback to notify webview
   // Requirements: 5.1, 5.2, 5.3, 7.1
@@ -305,6 +312,28 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  // Handle toggleTask from spec detail panel
+  const toggleTaskFromDetailCommand = vscode.commands.registerCommand(
+    'specs-dashboard.toggleTaskFromDetail',
+    async (args: { specName: string; workspaceFolder?: string; fileName: string; taskLine: number }) => {
+      if (!args) return;
+      // Delegate to the provider's existing toggle logic
+      if (args.fileName === 'tasks.md') {
+        await (provider as any).toggleTask(args.specName, args.taskLine);
+      } else {
+        await (provider as any).toggleExtraFileTask(args.specName, args.fileName, args.taskLine);
+      }
+      // After toggle, update the detail panel with refreshed spec
+      const specs = provider.getSpecs();
+      const updated = args.workspaceFolder
+        ? specs.find(s => s.name === args.specName && s.workspaceFolder === args.workspaceFolder)
+        : specs.find(s => s.name === args.specName);
+      if (updated) {
+        specDetailPanelManager.updateSpec(updated);
+      }
+    }
+  );
+
   // Set up file system watchers for spec files with debouncing
   let specWatchers: vscode.FileSystemWatcher[] = [];
 
@@ -363,7 +392,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Refresh dashboard when extra file label or visibility settings change (Requirement 2.5)
     if (e.affectsConfiguration('kiroSpecsDashboard.extraFileLabels') ||
-        e.affectsConfiguration('kiroSpecsDashboard.extraFileVisibility')) {
+        e.affectsConfiguration('kiroSpecsDashboard.extraFileVisibility') ||
+        e.affectsConfiguration('kiroSpecsDashboard.specFileConfig')) {
       provider.refresh();
     }
   });
@@ -419,6 +449,7 @@ export function activate(context: vscode.ExtensionContext): void {
     migrateVelocityDataCommand,
     openProfilesCommand,
     openAnalyticsCommand,
+    toggleTaskFromDetailCommand,
     profilesWatcher,
     workspaceFoldersChangeListener,
     configChangeListener,

@@ -329,6 +329,7 @@ export interface ExecutionProfile {
   createdAt: string;             // ISO 8601 timestamp
   updatedAt: string;             // ISO 8601 timestamp
   description?: string;          // Optional description
+  targetFiles?: string[];        // File types this profile applies to (e.g. ["tasks.md"]). Empty/undefined = all files.
   metadata?: Record<string, any>; // Optional custom metadata
 }
 

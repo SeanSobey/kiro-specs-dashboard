@@ -490,6 +490,10 @@
                     <div class="detail-content" id="detailInfo"></div>
                 </div>
                 <div class="detail-section">
+                    <h3 class="detail-section-title">Target Files</h3>
+                    <div class="detail-content" id="detailTargetFiles"></div>
+                </div>
+                <div class="detail-section">
                     <h3 class="detail-section-title">Prompt Template</h3>
                     <div class="detail-content">
                         <pre><code id="detailTemplate"></code></pre>
@@ -581,6 +585,17 @@
                         <div class="form-error hidden" id="createPromptTemplateError"></div>
                     </div>
 
+                    <div class="form-group">
+                        <label class="form-label" for="createTargetFiles">
+                            Target Files
+                        </label>
+                        <input class="form-input" type="text" id="createTargetFiles"
+                            placeholder="e.g. tasks.md, test-cases.md (leave empty for all files)">
+                        <div class="form-help">
+                            Comma-separated list of file names this profile applies to. Leave empty to apply to all task files.
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" class="form-btn secondary" id="cancelCreateBtn">Cancel</button>
                         <button type="submit" class="form-btn">Create Profile</button>
@@ -664,6 +679,17 @@
                             Available variables: {{specName}}, {{specPath}}, {{totalTasks}}, {{completedTasks}}, {{remainingTasks}}, {{workspaceFolder}}, {{specRelativePath}}
                         </div>
                         <div class="form-error hidden" id="editPromptTemplateError"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="editTargetFiles">
+                            Target Files
+                        </label>
+                        <input class="form-input" type="text" id="editTargetFiles"
+                            placeholder="e.g. tasks.md, test-cases.md (leave empty for all files)">
+                        <div class="form-help">
+                            Comma-separated list of file names this profile applies to. Leave empty to apply to all task files.
+                        </div>
                     </div>
 
                     <div class="form-actions">
@@ -938,6 +964,7 @@
             document.getElementById('editIcon').value = profile.icon;
             document.getElementById('editDescription').value = profile.description || '';
             document.getElementById('editPromptTemplate').value = profile.promptTemplate;
+            document.getElementById('editTargetFiles').value = (profile.targetFiles || []).join(', ');
 
             clearFormErrors('edit');
         }
@@ -974,6 +1001,13 @@
             
             const templateCode = document.getElementById('detailTemplate');
             templateCode.textContent = profile.promptTemplate;
+
+            const targetFilesEl = document.getElementById('detailTargetFiles');
+            if (profile.targetFiles && profile.targetFiles.length > 0) {
+                targetFilesEl.textContent = profile.targetFiles.join(', ');
+            } else {
+                targetFilesEl.textContent = 'All files (no restriction)';
+            }
             
             // Apply syntax highlighting if available
             if (typeof hljs !== 'undefined') {
@@ -997,6 +1031,7 @@
             const icon = document.getElementById('createIcon').value;
             const description = document.getElementById('createDescription').value.trim();
             const promptTemplate = document.getElementById('createPromptTemplate').value.trim();
+            const targetFilesRaw = document.getElementById('createTargetFiles').value.trim();
 
             // Validate
             clearFormErrors('create');
@@ -1031,12 +1066,16 @@
             if (hasErrors) return;
 
             // Create profile object
+            const targetFiles = targetFilesRaw
+                ? targetFilesRaw.split(',').map(f => f.trim()).filter(f => f.length > 0)
+                : undefined;
             const profile = {
                 id,
                 name,
                 icon,
                 description: description || undefined,
                 promptTemplate,
+                targetFiles,
                 isBuiltIn: false,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -1058,6 +1097,7 @@
             const icon = document.getElementById('editIcon').value;
             const description = document.getElementById('editDescription').value.trim();
             const promptTemplate = document.getElementById('editPromptTemplate').value.trim();
+            const editTargetFilesRaw = document.getElementById('editTargetFiles').value.trim();
 
             // Validate
             clearFormErrors('edit');
@@ -1081,11 +1121,15 @@
             if (hasErrors) return;
 
             // Create updates object
+            const editTargetFiles = editTargetFilesRaw
+                ? editTargetFilesRaw.split(',').map(f => f.trim()).filter(f => f.length > 0)
+                : undefined;
             const updates = {
                 name,
                 icon,
                 description: description || undefined,
                 promptTemplate,
+                targetFiles: editTargetFiles,
                 updatedAt: new Date().toISOString()
             };
 
